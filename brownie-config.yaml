@@ -1,0 +1,30 @@
+dependencies:
+  # we're using 4.0.0 since we don't need proxy beacon logic from 4.1.0
+  - OpenZeppelin/openzeppelin-contracts@4.0.0
+  - Uniswap/v3-core@1.0.0
+
+networks:
+  default: development
+  development:
+    cmd: ganache-cli
+    host: http://127.0.0.1
+    timeout: 120
+    cmd_settings:
+      port: 8545
+      gas_limit: 12000000
+      accounts: 15
+      default_balance: 10000000
+      evm_version: istanbul
+      mnemonic: 'rib diamond horse main tenant habit nothing fish alarm budget age comic filter execute used'
+      # fork: http://localhost:9545@14042429
+      fork: https://eth-mainnet.alchemyapi.io/v2/0dQtSg0BT-uVEs2nqzN3rqxZ9sQ_SSGA
+
+compiler:
+    evm_version: null
+    solc:
+        version: 0.7.6
+        optimizer:
+            enabled: true
+            runs: 200
+        remappings:
+          - "@uniswap/v3-core=Uniswap/v3-core@1.0.0"
