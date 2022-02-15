@@ -8,6 +8,8 @@ import { IERC20Minimal } from '@uniswap/v3-core/contracts/interfaces/IERC20Minim
 import { LowGasSafeMath } from "@uniswap/v3-core/contracts/libraries/LowGasSafeMath.sol";
 import { TickMath } from "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+
 
 interface ChainlinkAggregatorV3Interface {
   function decimals() external view returns (uint8);
@@ -43,30 +45,75 @@ interface WstETH {
 contract UniV3LiquidityProvider is IUniswapV3MintCallback {
   using LowGasSafeMath for uint256;
 
+  address public admin;
+
   IUniswapV3Pool public constant pool = IUniswapV3Pool(0xD340B57AAcDD10F96FC1CF10e15921936F41E29c);
 
-  address public constant token0 = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0; // wstETH
-  address public constant token1 = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH
+  address public constant TOKEN0 = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0; // wstETH
+  address public constant TOKEN1 = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH
   address public constant STETH_TOKEN = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
 
   address public constant CHAINLINK_STETH_ETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
 
+  address public constant LIDO_AGENT = 0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c;
+
   uint256 public constant TOTAL_SLIPPAGE_POINTS = 1e4;
-  uint256 public constant MAX_SLIPPAGE = 50; // value of TOTAL_SLIPPAGE_POINTS counts for 100%
+  uint256 public constant MAX_DIFF_TO_CHAINLINK = 50; // value of TOTAL_SLIPPAGE_POINTS counts for 100%
 
-  int24 public constant wideLowerTick = -970; // 1.1019
-  int24 public constant wideUpperTick = 1630; // 0.8496
+  int24 public constant POSITION_LOWER_TICK = -1630; // 0.8496
+  int24 public constant POSITION_UPPER_TICK = 970; // 1.1019
 
-  /// Corresponds to 0.5% change from spot price 1.0609086
-  uint24 public constant maxTickMovement = 50;
+  /// The tick (corresponds to some price) we'd like not to be moved too far away from
+  /// Corresponds to the price 1.0609086
+  int24 public constant TARGET_TICK = 590;
 
-  bytes32 public immutable widePositionID;
+  /// Corresponds to 0.5% price change from the price specified by TARGET_TICK
+  /// Note this value is a subject of logarithm based calculations, it is not just
+  /// that "1" corresponds to 0.01% as it might seem
+  uint24 public constant MAX_TICK_MOVEMENT = 50;
 
+  bytes32 public immutable POSITION_ID;
+
+    /**
+    * Emitted when the ERC20 `token` recovered (e.g. transferred)
+    * to the Lido treasure address by `requestedBy` sender.
+    */
+    event ERC20Withdrawn(
+        address indexed requestedBy,
+        address indexed token,
+        uint256 amount
+    );
+
+    /**
+      * Emitted when the ERC721-compatible `token` (NFT) recovered (e.g. transferred)
+      * to the Lido treasure address by `requestedBy` sender.
+      */
+    event ERC721Withdrawn(
+        address indexed requestedBy,
+        address indexed token,
+        uint256 tokenId
+    );
+
+    event EthWithdrawn(
+      address requestedBy,
+      uint256 amount
+    );
+
+
+  modifier authAdminOrDao() {
+    require(msg.sender == admin || msg.sender == LIDO_AGENT, "ONLY_ADMIN_OR_DAO_CAN");
+    _;
+  }
 
   constructor() {
-    pool.increaseObservationCardinalityNext(30); // TODO: remove?
+    admin = msg.sender;
 
-    widePositionID = keccak256(abi.encodePacked(address(this), wideLowerTick, wideUpperTick));
+    POSITION_ID = keccak256(abi.encodePacked(address(this), POSITION_LOWER_TICK, POSITION_UPPER_TICK));
+  }
+
+  function setAdmin(address _admin) external authAdminOrDao() {
+    require(msg.sender == admin, "ONLY_ADMIN_CAN");
+    admin = _admin;
   }
 
   receive() external payable {
@@ -74,7 +121,7 @@ contract UniV3LiquidityProvider is IUniswapV3MintCallback {
 
   function _getChainlinkBasedWstethPrice() internal view returns (uint256) {
     uint256 priceDecimals = ChainlinkAggregatorV3Interface(CHAINLINK_STETH_ETH_PRICE_FEED).decimals();
-    // assert 0 < priceDecimals and priceDecimals <= 18
+    assert(0 < priceDecimals && priceDecimals <= 18);
     (
       uint80 roundID, 
       int price,
@@ -85,12 +132,8 @@ contract UniV3LiquidityProvider is IUniswapV3MintCallback {
 
     assert(timeStamp != 0);
     uint256 ethPerSteth = uint256(price * int(10 ** (18 - priceDecimals)));
-    uint256 stethPerWsteth = WstETH(token0).stEthPerToken();
+    uint256 stethPerWsteth = WstETH(TOKEN0).stEthPerToken();
     return ethPerSteth * stethPerWsteth;
-  }
-
-  function getSpotPrice() external view returns (uint256) {
-    return _getSpotPrice();
   }
 
   function _getSpotPrice() internal view returns (uint256) {
@@ -98,61 +141,52 @@ contract UniV3LiquidityProvider is IUniswapV3MintCallback {
     return uint(sqrtRatioX96).mul(uint(sqrtRatioX96)).mul(1e18) >> (96 * 2);
   }
 
-  function getCurrentPriceTick() external view returns (int24) {
-    (, int24 currentTick, , , , , ) = pool.slot0();
-    return currentTick;
-  }
-
-  // TODO: authentication
-  function seed(uint128 _liquidity) external returns (
+  function seed(uint128 _liquidity) external authAdminOrDao() returns (
     uint256 token0Seeded,
     uint256 token1Seeded,
     uint256 token0Left,
     uint256 token1Left
   ) {
-    // TODO: check current price
+    require(_movementFromTargetPrice() <= MAX_TICK_MOVEMENT, "TICK_MOVEMENT_TOO_LARGE_AT_START");
+    require(_getDiffToChainlinkPrice() <= MAX_DIFF_TO_CHAINLINK, "LARGE_DIFFERENCE_TO_CHAINLINK_PRICE_AT_START");
 
     (uint256 amount0, uint256 amount1) = pool.mint(
       address(this),
-      wideLowerTick,
-      wideUpperTick,
+      POSITION_LOWER_TICK,
+      POSITION_UPPER_TICK,
       _liquidity,
       abi.encode(msg.sender) // Data field for uniswapV3MintCallback
     );
 
-    token0Left = IERC20Minimal(token0).balanceOf(address(this));
-    token1Left = IERC20Minimal(token1).balanceOf(address(this));
+    token0Left = IERC20Minimal(TOKEN0).balanceOf(address(this));
+    token1Left = IERC20Minimal(TOKEN1).balanceOf(address(this));
     token0Seeded = amount0;
     token1Seeded = amount1;
 
-    requireLimitedSlippageToTwapPrice();
-    requireLimitedSlippageToChainlinkPrice();
-  }
-
-  function getAmountOfEthForWsteth(uint256 _amountOfWsteth) external view returns (uint256) {
-    return _getAmountOfEthForWsteth(_amountOfWsteth);
+    require(_movementFromTargetPrice() <= MAX_TICK_MOVEMENT, "TICK_MOVEMENT_TOO_LARGE");
+    require(_getDiffToChainlinkPrice() <= MAX_DIFF_TO_CHAINLINK, "LARGE_DIFFERENCE_TO_CHAINLINK_PRICE");
   }
 
   function _getAmountOfEthForWsteth(uint256 _amountOfWsteth) internal view returns (uint256) {
-    return (_amountOfWsteth * WstETH(token0).stEthPerToken()) / 1e18;
+    return (_amountOfWsteth * WstETH(TOKEN0).stEthPerToken()) / 1e18;
   }
 
-  function exchangeForTokens(uint256 ethForWsteth, uint256 ethForWeth) external {
-    _exchangeForTokens(ethForWsteth, ethForWeth);
-  }
+  // Need to have ethForWsteth+2 on balance, due to exchanging for stETH eats 1 additional wei
+  // and exchanging stETH for wstETH eats one more additional wei
+  function _exchangeForTokens(uint256 _ethForWsteth, uint256 ethForWeth) internal {
+    uint256 ethForSteth = _ethForWsteth + 2;
+    uint256 stethForWsteth = _ethForWsteth + 1;
+    require(address(this).balance >= ethForSteth + ethForWeth, "NOT_ENOUGH_ETH");
 
-  function _exchangeForTokens(uint256 ethForWsteth, uint256 ethForWeth) internal {
-      require(address(this).balance >= ethForWeth + ethForWsteth, "NOT_ENOUGH_ETH");
+    StETH(STETH_TOKEN).submit{value: ethForSteth}(address(0x00));
+    require(IERC20Minimal(STETH_TOKEN).balanceOf(address(this)) == stethForWsteth);
 
-      IWethToken(token1).deposit{value: ethForWeth}();
-      require(IERC20Minimal(token1).balanceOf(address(this)) == ethForWeth);
-
-      StETH(STETH_TOKEN).submit{value: ethForWsteth}(address(0x00));
-      require(IERC20Minimal(STETH_TOKEN).balanceOf(address(this)) == ethForWsteth - 1);
-
-      IERC20Minimal(STETH_TOKEN).approve(token0, ethForWsteth);
-      uint256 wstethAmount = WstETH(token0).wrap(ethForWsteth);
-      require(IERC20Minimal(token0).balanceOf(address(this)) == wstethAmount);
+    IERC20Minimal(STETH_TOKEN).approve(TOKEN0, stethForWsteth);
+    uint256 wstethAmount = WstETH(TOKEN0).wrap(stethForWsteth);
+    require(IERC20Minimal(TOKEN0).balanceOf(address(this)) == wstethAmount);
+ 
+    IWethToken(TOKEN1).deposit{value: ethForWeth}();
+    require(IERC20Minimal(TOKEN1).balanceOf(address(this)) == ethForWeth);
   }
 
   function uniswapV3MintCallback(
@@ -163,54 +197,74 @@ contract UniV3LiquidityProvider is IUniswapV3MintCallback {
     require(msg.sender == address(pool));
 
     uint256 ethForToken0 = _getAmountOfEthForWsteth(amount0Owed);
-    _exchangeForTokens(ethForToken0 + 1, amount1Owed);
+    _exchangeForTokens(ethForToken0 + 2, amount1Owed);
 
-    require(IERC20Minimal(token0).balanceOf(address(this)) >= amount0Owed, "NOT_ENOUGH_TOKEN0");
-    require(IERC20Minimal(token1).balanceOf(address(this)) >= amount1Owed, "NOT_ENOUGH_TOKEN1");
+    require(IERC20Minimal(TOKEN0).balanceOf(address(this)) >= amount0Owed, "NOT_ENOUGH_TOKEN0");
+    require(IERC20Minimal(TOKEN1).balanceOf(address(this)) >= amount1Owed, "NOT_ENOUGH_TOKEN1");
 
     require(amount0Owed > 0, "AMOUNT0OWED_IS_ZERO");
     require(amount1Owed > 0, "AMOUNT01WED_IS_ZERO");
-    IERC20Minimal(token0).transfer(address(pool), amount0Owed);
-    IERC20Minimal(token1).transfer(address(pool), amount1Owed);
+    IERC20Minimal(TOKEN0).transfer(address(pool), amount0Owed);
+    IERC20Minimal(TOKEN1).transfer(address(pool), amount1Owed);
   }
 
-  /// @notice Ensure that the current price isn't too far from the 5 minute TWAP price
-  function requireLimitedSlippageToTwapPrice() private view {
+  /// Calced in ticks
+  function _movementFromTargetPrice() internal view returns (uint24) {
     (, int24 currentTick, , , , , ) = pool.slot0();
-
-    uint32[] memory secondsAgos = new uint32[](2);
-    secondsAgos[0] = 5 minutes;
-    secondsAgos[1] = 0;
-    (int56[] memory tickCumulatives, ) = pool.observe(secondsAgos);
-
-    int24 averageTick = int24(int256(tickCumulatives[1] - tickCumulatives[0]) / 5 minutes);
-
-    int24 diff = averageTick > currentTick ? averageTick - currentTick : currentTick - averageTick;
-    require(uint24(diff) < maxTickMovement, "Slippage");
+    int24 movement = currentTick - TARGET_TICK;
+    if (movement < 0) {
+      movement = -movement;
+    }
+    return uint24(movement);
   }
 
-  function _calcSlippage(uint256 chainlinkPrice, uint256 spotPrice) internal view returns (uint256 slippage) {
+  function _calcSpotToChainlinkPriceAbsDiff(uint256 chainlinkPrice, uint256 spotPrice)
+    internal view returns (uint256 difference)
+  {
     int chainlinkPrice_ = int(chainlinkPrice / 1e18);
     int spotPrice_ = int(spotPrice);
 
-    int slippage_ = ((spotPrice_ - chainlinkPrice_) * int(TOTAL_SLIPPAGE_POINTS)) / 1e18;
-    if (slippage_ < 0)
-      slippage_ = -slippage_;
+    int diff = ((spotPrice_ - chainlinkPrice_) * int(TOTAL_SLIPPAGE_POINTS)) / 1e18;
+    if (diff < 0)
+      diff = -diff;
 
-    slippage = uint256(slippage_);
+    difference = uint256(diff);
   }
 
-  function calcSlippage(uint256 chainlinkPrice, uint256 spotPrice) public view returns (uint256 slippage) {
-    return _calcSlippage(chainlinkPrice, spotPrice);
+
+  function _getDiffToChainlinkPrice() internal view returns (uint256) {
+    return _calcSpotToChainlinkPriceAbsDiff(_getChainlinkBasedWstethPrice(), _getSpotPrice());
   }
 
-  function requireLimitedSlippageToChainlinkPrice() private view {
-    uint256 slippage = _calcSlippage(_getChainlinkBasedWstethPrice(), _getSpotPrice());
-    if (slippage < 0)
-      slippage = -slippage;
-    require(slippage <= MAX_SLIPPAGE, "LARGE_SLIPPAGE");
+  /**
+    * Transfers all of the ERC20-token (defined by the `_token` contract address)
+    * to the Lido agent address.
+    *
+    * @param _token an ERC20-compatible token
+    */
+  function withdrawERC20(address _token) external authAdminOrDao() {
+    uint256 amount = IERC20Minimal(_token).balanceOf(address(this));
+    emit ERC20Withdrawn(msg.sender, _token, amount);
+    require(IERC20Minimal(_token).transfer(LIDO_AGENT, amount));
   }
 
-  // TODO: Add functions to withdraw tokens
+  /**
+    * Transfers a given token_id of an ERC721-compatible NFT (defined by the token contract address)
+    * currently belonging to the burner contract address to the Lido agent address.
+    *
+    * @param _token an ERC721-compatible token
+    * @param _tokenId minted token id
+    */
+  function withdrawERC721(address _token, uint256 _tokenId) external authAdminOrDao() {
+      emit ERC721Withdrawn(msg.sender, _token, _tokenId);
+
+      IERC721(_token).transferFrom(address(this), LIDO_AGENT, _tokenId);
+  }
+
+  function withdrawETH() external authAdminOrDao() {
+    emit EthWithdrawn(msg.sender, address(this).balance);
+    (bool success, ) = LIDO_AGENT.call{value: address(this).balance}("");
+    require(success);
+  }
 
 }

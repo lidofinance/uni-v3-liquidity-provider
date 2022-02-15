@@ -1,6 +1,6 @@
 dependencies:
-  # we're using 4.0.0 since we don't need proxy beacon logic from 4.1.0
-  - OpenZeppelin/openzeppelin-contracts@4.0.0
+  # Using v3 here because v4 needs 0.8.x solc, but Uniswap/v3-core requires 0.7.x
+  - OpenZeppelin/openzeppelin-contracts@3.4.2
   - Uniswap/v3-core@1.0.0
 
 networks:
@@ -28,3 +28,4 @@ compiler:
             runs: 200
         remappings:
           - "@uniswap/v3-core=Uniswap/v3-core@1.0.0"
+          - "@openzeppelin=OpenZeppelin/openzeppelin-contracts@3.4.2"
