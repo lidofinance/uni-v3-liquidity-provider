@@ -10,19 +10,19 @@ contract TestUniV3LiquidityProvider is UniV3LiquidityProvider {
   function calcSpotToChainlinkPriceAbsDiff(uint256 chainlinkPrice, uint256 spotPrice)
     public view returns (uint256 difference)
   {
-    return super._calcSpotToChainlinkPriceAbsDiff(chainlinkPrice, spotPrice);
+    return _calcSpotToChainlinkPriceAbsDiff(chainlinkPrice, spotPrice);
   }
 
   function movementFromTargetPrice() external view returns (uint24) {
-    return super._movementFromTargetPrice();
+    return _movementFromTargetPrice();
   }
 
   function exchangeForTokens(uint256 ethForWsteth, uint256 ethForWeth) external {
-    super._exchangeForTokens(ethForWsteth, ethForWeth);
+    _exchangeForTokens(ethForWsteth, ethForWeth);
   }
 
   function getAmountOfEthForWsteth(uint256 _amountOfWsteth) external view returns (uint256) {
-    return super._getAmountOfEthForWsteth(_amountOfWsteth);
+    return _getAmountOfEthForWsteth(_amountOfWsteth);
   }
 
   function getCurrentPriceTick() external view returns (int24) {
@@ -31,7 +31,18 @@ contract TestUniV3LiquidityProvider is UniV3LiquidityProvider {
   }
 
   function getSpotPrice() external view returns (uint256) {
-    return super._getSpotPrice();
+    return _getSpotPrice();
+  }
+
+  function getPositionInfo() external view returns (uint128 liquidity) {
+    (
+      uint128 liquidity,
+      uint256 feeGrowthInside0LastX128,
+      uint256 feeGrowthInside1LastX128,
+      uint128 tokensOwed0,
+      uint128 tokensOwed1
+    ) = pool.positions(POSITION_ID);
+
   }
 
 }

@@ -4,7 +4,7 @@ from brownie import Contract, accounts, ZERO_ADDRESS, chain, reverts, ETH_ADDRES
 from conftest import WETH_TOKEN
 
 ETH_TO_USE = 100 * 1e18
-LIQUIDITY = 300 * 1e18
+LIQUIDITY = 30 * 1e18
 
 LIDO_AGENT = "0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c"
 
@@ -72,20 +72,24 @@ def test_exchangeForTokens(deployer, the_contract, wsteth_token):
     assert wsteth_token.balanceOf(the_contract.address) == wsteth_needed
 
 
-def test_seed_happy_path(deployer, the_contract, steth_token, helpers):
+def test_seed_happy_path(deployer, the_contract, helpers):
     deployer.transfer(the_contract.address, ETH_TO_USE)
-
-    balance = steth_token.balanceOf(the_contract.address)
-    print(f"{balance=}")
 
     currentTickBefore = the_contract.getCurrentPriceTick();
     spotPrice = the_contract.getSpotPrice()
     print(f'spot price = {spotPrice}')
 
+    liquidityBefore = the_contract.getPositionInfo()
+
     tx = the_contract.seed(LIQUIDITY)
     # TODO: check pool size / position changed
 
+    # wsteth_seeded, weth_seeded = [x / 10**18 for x in tx.return_value]
+    wsteth_seeded, weth_seeded = [x for x in tx.return_value]
+    print(f'seeded: wsteth = {wsteth_seeded}, steth = {weth_seeded}')
     # print([x / 10**18 for x in tx.return_value])
+
+    liquidityAfter = the_contract.getPositionInfo()
 
     currentTickAfter = the_contract.getCurrentPriceTick();
 
@@ -93,15 +97,25 @@ def test_seed_happy_path(deployer, the_contract, steth_token, helpers):
     print(f'new spot price = {spotPrice}')
 
     print(f'currentPriceTick (before/after): {currentTickBefore}/{currentTickAfter}')
+    print(f'position liquidity (before/after): {liquidityBefore}/{liquidityAfter}')
+    assert False
 
 
 
 def test_seed_spot_prices_too_far_at_start(deployer, the_contract, the_pool, swapper):
     weth_to_swap = 100e18  # will cause ~ 63 movement shift at the time or writing the test
     currentTickBefore = the_contract.getCurrentPriceTick();
+    spotPrice = the_contract.getSpotPrice()
+    print(f'spot price = {spotPrice}')
+
     swapper.swapWeth({'from': deployer, 'value': weth_to_swap})
+
     currentTickAfter = the_contract.getCurrentPriceTick();
     print(f'currentPriceTick (before/after): {currentTickBefore}/{currentTickAfter}')
+    spotPrice = the_contract.getSpotPrice()
+    print(f'spot price = {spotPrice}')
+
+    assert False
 
     deployer.transfer(the_contract.address, ETH_TO_USE)
     
