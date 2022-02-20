@@ -1,10 +1,11 @@
 import pytest
 from brownie import ZERO_ADDRESS, Contract
 
-STETH_TOKEN = "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
-WETH_TOKEN = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-WSTETH_TOKEN = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
-POOL = "0xD340B57AAcDD10F96FC1CF10e15921936F41E29c"
+import sys
+import os.path
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
+import config
 
 
 @pytest.fixture(scope='function', autouse=True)
@@ -18,22 +19,26 @@ def deployer(accounts):
 
 @pytest.fixture(scope='module')
 def steth_token(interface):
-    return interface.ERC20(STETH_TOKEN)
+    return interface.ERC20(config.STETH_TOKEN)
 
 @pytest.fixture(scope='module')
 def weth_token(interface):
-    return interface.WETH(WETH_TOKEN)
+    return interface.WETH(config.WETH_TOKEN)
 
 @pytest.fixture(scope='module')
 def wsteth_token(interface):
-    return interface.WSTETH(WSTETH_TOKEN)
+    return interface.WSTETH(config.WSTETH_TOKEN)
 
 @pytest.fixture(scope='module')
-def the_pool(interface):
-    return interface.IUniswapV3PoolActions(POOL)
+def pool(interface):
+    return interface.IUniswapV3PoolActions(config.POOL)
+
+@pytest.fixture(scope='module')
+def lido_agent():
+    return Contract.from_abi("Foo", config.LIDO_AGENT, "")
 
 @pytest.fixture(scope='function')
-def the_contract(deployer, TestUniV3LiquidityProvider):
+def provider(deployer, TestUniV3LiquidityProvider):
     return TestUniV3LiquidityProvider.deploy({'from': deployer})
 
 # making scope 'module' causes "This contract no longer exists" errors

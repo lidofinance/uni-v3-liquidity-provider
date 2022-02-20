@@ -1,143 +1,218 @@
 from eth_account import Account
 import pytest
 from brownie import Contract, accounts, ZERO_ADDRESS, chain, reverts, ETH_ADDRESS
-from conftest import WETH_TOKEN
 
-ETH_TO_USE = 100 * 1e18
-LIQUIDITY = 30 * 1e18
+import sys
+import os.path
 
-LIDO_AGENT = "0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c"
+from scripts.utils import get_balance
+
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
+from config import toE18, ETH_TO_SEED, LIQUIDITY, WETH_TOKEN, WSTETH_TOKEN, LIDO_AGENT
 
 
-def get_balance(address):
-    return Contract.from_abi("Foo", address, "").balance()
+class assert_leftovers_refunded():
+    def __init__(self, provider, steth_token, wsteth_token, weth_token, lido_agent, need_check_agent_balance):
+        self.provider = provider
+        self.steth_token = steth_token
+        self.wsteth_token = wsteth_token
+        self.weth_token = weth_token
+        self.lido_agent = lido_agent
+        self.need_check_agent_balance = need_check_agent_balance
+
+    def __enter__(self):
+        self.agent_eth_before = self.lido_agent.balance()
+        self.eth_leftover = self.provider.balance()
+        self.weth_leftover = self.weth_token.balanceOf(self.provider.address)
+
+    def __exit__(self, *args):
+        assert self.provider.balance() == 0
+        assert self.weth_token.balanceOf(self.provider.address) == 0
+        assert self.steth_token.balanceOf(self.provider.address) <= 1
+        assert self.wsteth_token.balanceOf(self.provider.address) == 0
+
+        if self.need_check_agent_balance:
+            assert self.lido_agent.balance() - self.agent_eth_before \
+                == self.eth_leftover + self.weth_leftover
 
 
-def test_getAmountOfEthForWsteth(the_contract):
-    r = the_contract.getAmountOfEthForWsteth(1e18) / 1e18
+def test_getAmountOfEthForWsteth(provider):
+    r = provider.getAmountOfEthForWsteth(1e18) / 1e18
     assert 1.0 < r < 2.0
 
 
-def test_withdrawERC20(deployer, the_contract, weth_token):
+def test_withdrawERC20(deployer, provider, weth_token):
     amount = 1e10
 
     with reverts('ONLY_ADMIN_OR_DAO_CAN'):
-        the_contract.withdrawERC20(WETH_TOKEN, {'from': accounts[2]})
+        provider.withdrawERC20(WETH_TOKEN, 123456789, {'from': accounts[2]})
 
     weth_token.deposit({'from': deployer, 'value': amount})
-    weth_token.transfer(the_contract.address, amount, {'from': deployer})
-    assert weth_token.balanceOf(the_contract.address) == amount
+    weth_token.transfer(provider.address, amount, {'from': deployer})
+    assert weth_token.balanceOf(provider.address) == amount
     assert weth_token.balanceOf(deployer) == 0
 
     agent_balance_before = weth_token.balanceOf(LIDO_AGENT)
-    the_contract.withdrawERC20(WETH_TOKEN)
+    provider.withdrawERC20(WETH_TOKEN, amount)
     assert weth_token.balanceOf(LIDO_AGENT) == agent_balance_before + amount
 
 
-def test_withdrawETH(deployer, the_contract):
+def test_withdrawETH(deployer, provider):
     balance_before = get_balance(LIDO_AGENT)
-    amount = 1e18
+    amount = toE18(1)
 
     with reverts('ONLY_ADMIN_OR_DAO_CAN'):
-        the_contract.withdrawETH({'from': accounts[2]})
+        provider.withdrawETH({'from': accounts[2]})
 
-    deployer.transfer(the_contract.address, amount)
-    the_contract.withdrawETH()
+    deployer.transfer(provider.address, amount)
+    provider.withdrawETH()
 
-    deployer.transfer(the_contract.address, amount)
-    the_contract.withdrawETH({'from': LIDO_AGENT})
+    deployer.transfer(provider.address, amount)
+    provider.withdrawETH({'from': LIDO_AGENT})
 
     assert balance_before + 2 * amount == get_balance(LIDO_AGENT)
 
 
-def disable_test_withdrawERC721(deployer, the_contract):
+def disable_test_withdrawERC721(deployer, provider):
     assert False
 
 
-def test_priceDiffToChainlink(the_contract):
-    diff = the_contract.calcSpotToChainlinkPriceAbsDiff(1059942733650492541866266407236800000, 1060801733107162407)
-    assert diff < 50
+# TODO: restore test
+# def test_price_diff_to_chaini(provider):
+#     diff = provider.calcSpotToChainlinkPriceAbsDiff(1059942733650492541866266407236800000, 1060801733107162407)
+#     assert diff < 50
 
-    diff = the_contract.calcSpotToChainlinkPriceAbsDiff(1055542733650492541866266407236800000, 1060801733107162407)
-    assert diff > 50
-
-
-def test_exchangeForTokens(deployer, the_contract, wsteth_token):
-    assert wsteth_token.balanceOf(the_contract.address) == 0
-    deployer.transfer(the_contract.address, ETH_TO_USE)
-    wsteth_needed = 1e16
-
-    eth_for_wsteth = the_contract.getAmountOfEthForWsteth(wsteth_needed)
-    the_contract.exchangeForTokens(eth_for_wsteth, 0)
-    assert wsteth_token.balanceOf(the_contract.address) == wsteth_needed
+#     diff = provider.calcSpotToChainlinkPriceAbsDiff(1055542733650492541866266407236800000, 1060801733107162407)
+#     assert diff > 50
 
 
-def test_seed_happy_path(deployer, the_contract, helpers):
-    deployer.transfer(the_contract.address, ETH_TO_USE)
+def test_mint_happy_path(deployer, provider, steth_token, wsteth_token, weth_token, lido_agent):
+    deployer.transfer(provider.address, ETH_TO_SEED)
 
-    currentTickBefore = the_contract.getCurrentPriceTick();
-    spotPrice = the_contract.getSpotPrice()
-    print(f'spot price = {spotPrice}')
+    currentTickBefore = provider.getCurrentPriceTick();
+    spotPrice = provider.getSpotPrice()
+    # print(f'spot price = {spotPrice}')
 
-    liquidityBefore = the_contract.getPositionInfo()
+    liquidityBefore = provider.getPositionLiquidity()
+    assert liquidityBefore == 0
 
-    tx = the_contract.seed(LIQUIDITY)
-    # TODO: check pool size / position changed
+    with assert_leftovers_refunded(provider, steth_token, wsteth_token,
+                                   weth_token, lido_agent, need_check_agent_balance=False):
+        tx = provider.mint()
+
+    print(tx.return_value)
+    amount0, amount1, liquidity, token_id = tx.return_value
+    token_owner = provider.getPositionTokenOwner(token_id)
+    assert token_owner == LIDO_AGENT
+
+    # wsteth_seeded, weth_seeded = [x / 10**18 for x in tx.return_value]
+
+    # TODO: check pool position liquidity increment
+
+    liquidityAfter = provider.getPositionLiquidity()
+    # assert liquidityAfter == LIQUIDITY
+
+    currentTickAfter = provider.getCurrentPriceTick();
+
+    spotPrice = provider.getSpotPrice()
+    # print(f'new spot price = {spotPrice}')
+
+    # print(f'currentPriceTick (before/after): {currentTickBefore}/{currentTickAfter}')
+    # print(f'position liquidity (before/after): {liquidityBefore}/{liquidityAfter}')
+
+
+def test_exchange_for_tokens(deployer, provider, wsteth_token, weth_token):
+    weth_amount = toE18(20.1234)
+    wsteth_amount = toE18(30.98)
+    aux_wsteth_weis = 1000
+
+    deployer.transfer(provider.address, toE18(200))
+    provider.exchangeEthForTokens(wsteth_amount, weth_amount)
+
+    assert weth_token.balanceOf(provider.address) == weth_amount
+    assert wsteth_amount <= wsteth_token.balanceOf(provider.address) <= wsteth_amount + aux_wsteth_weis
+
+
+def test_refund_leftovers(deployer, provider, steth_token, wsteth_token, weth_token, lido_agent):
+    deployer.transfer(provider.address, toE18(20))
+    provider.exchangeEthForTokens(toE18(2), toE18(3))
+
+    with assert_leftovers_refunded(provider, steth_token, wsteth_token, weth_token,
+                                   lido_agent, need_check_agent_balance=True):
+        provider.refundLeftoversToLidoAgent()
+
+
+def disabled_test_seed_happy_path(deployer, provider, helpers):
+    deployer.transfer(provider.address, ETH_TO_SEED)
+
+    currentTickBefore = provider.getCurrentPriceTick();
+    spotPrice = provider.getSpotPrice()
+    # print(f'spot price = {spotPrice}')
+
+    liquidityBefore = provider.getPositionLiquidity()
+    assert liquidityBefore == 0
+
+    tx = provider.seed(LIQUIDITY)
 
     # wsteth_seeded, weth_seeded = [x / 10**18 for x in tx.return_value]
     wsteth_seeded, weth_seeded = [x for x in tx.return_value]
-    print(f'seeded: wsteth = {wsteth_seeded}, steth = {weth_seeded}')
-    # print([x / 10**18 for x in tx.return_value])
+    # print(f'seeded: wsteth = {wsteth_seeded}, weth = {weth_seeded}')
 
-    liquidityAfter = the_contract.getPositionInfo()
+    liquidityAfter = provider.getPositionLiquidity()
+    assert liquidityAfter == LIQUIDITY
 
-    currentTickAfter = the_contract.getCurrentPriceTick();
+    currentTickAfter = provider.getCurrentPriceTick();
 
-    spotPrice = the_contract.getSpotPrice()
-    print(f'new spot price = {spotPrice}')
+    spotPrice = provider.getSpotPrice()
+    # print(f'new spot price = {spotPrice}')
 
-    print(f'currentPriceTick (before/after): {currentTickBefore}/{currentTickAfter}')
-    print(f'position liquidity (before/after): {liquidityBefore}/{liquidityAfter}')
-    assert False
-
+    # print(f'currentPriceTick (before/after): {currentTickBefore}/{currentTickAfter}')
+    # print(f'position liquidity (before/after): {liquidityBefore}/{liquidityAfter}')
 
 
-def test_seed_spot_prices_too_far_at_start(deployer, the_contract, the_pool, swapper):
-    weth_to_swap = 100e18  # will cause ~ 63 movement shift at the time or writing the test
-    currentTickBefore = the_contract.getCurrentPriceTick();
-    spotPrice = the_contract.getSpotPrice()
+def disabled_test_seed_spot_prices_too_far_at_start(deployer, provider, pool, swapper):
+    weth_to_swap = toE18(100)  # will cause ~ 63 movement shift at the time or writing the test
+    currentTickBefore = provider.getCurrentPriceTick();
+    spotPrice = provider.getSpotPrice()
     print(f'spot price = {spotPrice}')
 
     swapper.swapWeth({'from': deployer, 'value': weth_to_swap})
 
-    currentTickAfter = the_contract.getCurrentPriceTick();
+    currentTickAfter = provider.getCurrentPriceTick();
     print(f'currentPriceTick (before/after): {currentTickBefore}/{currentTickAfter}')
-    spotPrice = the_contract.getSpotPrice()
+    spotPrice = provider.getSpotPrice()
     print(f'spot price = {spotPrice}')
 
     assert False
 
-    deployer.transfer(the_contract.address, ETH_TO_USE)
+    deployer.transfer(provider.address, ETH_TO_SEED)
     
     with reverts('TICK_MOVEMENT_TOO_LARGE_AT_START'):
-        the_contract.seed(LIQUIDITY)
+        provider.seed(LIQUIDITY)
 
 
-def test_seed_success_if_small_price_tick_movement(deployer, the_contract, the_pool, swapper):
-    weth_to_swap = 30e18  # will cause ~ 18 ticks movement at the time or writing the test
+def test_seed_success_if_small_price_tick_movement(deployer, provider, pool, swapper):
+    weth_to_swap = toE18(30)  # will cause ~ 18 ticks movement at the time or writing the test
 
-    currentTickBefore = the_contract.getCurrentPriceTick();
+    currentTickBefore = provider.getCurrentPriceTick();
     swapper.swapWeth({'from': deployer, 'value': weth_to_swap})
-    currentTickAfter = the_contract.getCurrentPriceTick();
+    currentTickAfter = provider.getCurrentPriceTick();
 
     print(f'currentPriceTick (before/after): {currentTickBefore}/{currentTickAfter}')
 
-    deployer.transfer(the_contract.address, ETH_TO_USE)
+    deployer.transfer(provider.address, ETH_TO_SEED)
     
-    the_contract.seed(LIQUIDITY)
+    provider.seed(LIQUIDITY)
     # TODO: check pool size / position changed
 
 
-def test_seed_fails_due_to_chainlink_price_moved_much():
+def todo_test_seed_fails_due_to_chainlink_price_moved_much():
     # TODO: need to mock chainlink for this
     pass
+
+def todo_test_compare_parameters():
+    # params in contract and in config.py
+    pass
+
+

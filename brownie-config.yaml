@@ -1,7 +1,8 @@
 dependencies:
-  # Using v3 here because v4 needs 0.8.x solc, but Uniswap/v3-core requires 0.7.x
+  # Using OZ v3 here because v4 needs 0.8.x solc, but Uniswap/v3-core requires 0.7.x
   - OpenZeppelin/openzeppelin-contracts@3.4.2
   - Uniswap/v3-core@1.0.0
+  - Uniswap/v3-periphery@1.3.0
 
 networks:
   default: development
@@ -28,4 +29,5 @@ compiler:
             runs: 200
         remappings:
           - "@uniswap/v3-core=Uniswap/v3-core@1.0.0"
+          - "@uniswap/v3-periphery=Uniswap/v3-periphery@1.3.0"
           - "@openzeppelin=OpenZeppelin/openzeppelin-contracts@3.4.2"
