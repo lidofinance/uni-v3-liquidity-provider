@@ -20,7 +20,6 @@ contract TokensSwapper is IUniswapV3SwapCallback {
   IWethToken public constant WETH_TOKEN = IWethToken(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
   // Set no limit to allow an arbitrary slippage
-
   function swapWsteth(int256 _amount) external {
     uint160 sqrtPriceLimitX96 = 0;
 

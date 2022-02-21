@@ -7,6 +7,7 @@ import os.path
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 from config import ETH_TO_SEED, formatE18, POOL, LIQUIDITY
+from .utils import get_diff_in_percent
 
 
 deployer = accounts[0]
@@ -22,11 +23,16 @@ def print_stats():
     info['current price'] = formatE18(provider.getSpotPrice())
     info['current tick'] = provider.getCurrentPriceTick()
     info['in-range liquidity'] = formatE18(pool.liquidity())
+
+    # TODO: calc total pool liquidity
+
+    diff_from_chainlink = get_diff_in_percent(provider.getSpotPrice(), provider.getChainlinkBasedWstethPrice())
+    info['diff from chainlink price'] = f'{diff_from_chainlink:.2}%'
     pprint(info)
 
 
 def get_amounts_for_liquidity(liquidity):
-    tx = provider.seed(liquidity)
+    tx = provider.calcTokenAmounts(liquidity)
     wstethAmount, wethAmount = tx.return_value
     return wstethAmount, wethAmount
 

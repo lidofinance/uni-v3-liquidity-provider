@@ -10,3 +10,6 @@ def formatE18(num):
 
 def get_balance(address):
     return Contract.from_abi("Foo", address, "").balance()
+
+def get_diff_in_percent(base, value):
+    return (value - base) / base * 100
