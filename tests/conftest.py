@@ -39,7 +39,12 @@ def lido_agent():
 
 @pytest.fixture(scope='function')
 def provider(deployer, TestUniV3LiquidityProvider):
-    return TestUniV3LiquidityProvider.deploy({'from': deployer})
+    return TestUniV3LiquidityProvider.deploy(
+        config.DESIRED_TICK,
+        config.DESIRED_WSTETH,
+        config.DESIRED_WETH,
+        config.MAX_DEVIATION_FROM_CHAINLINK_PRICE_POINTS,
+        {'from': deployer})
 
 # making scope 'module' causes "This contract no longer exists" errors
 @pytest.fixture(scope='function')

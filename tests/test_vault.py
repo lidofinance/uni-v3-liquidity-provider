@@ -10,7 +10,7 @@ from scripts.utils import formatE18, get_balance
 
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
-from config import toE18, ETH_TO_SEED, LIQUIDITY, WETH_TOKEN, WSTETH_TOKEN, LIDO_AGENT
+from config import toE18, ETH_TO_SEED, WETH_TOKEN, WSTETH_TOKEN, LIDO_AGENT
 
 
 class assert_leftovers_refunded():
@@ -172,6 +172,7 @@ def test_refund_leftovers(deployer, provider, steth_token, wsteth_token, weth_to
 
 
 def test_calc_token_amounts(deployer, provider, helpers):
+    liquidity = ETH_TO_SEED / 10
     deployer.transfer(provider.address, ETH_TO_SEED)
 
     currentTickBefore = provider.getCurrentPriceTick();
@@ -181,14 +182,14 @@ def test_calc_token_amounts(deployer, provider, helpers):
     liquidityBefore = provider.getPositionLiquidity()
     assert liquidityBefore == 0
 
-    tx = provider.calcTokenAmounts(LIQUIDITY)
+    tx = provider.calcTokenAmounts(liquidity)
 
     # wsteth_seeded, weth_seeded = [x / 10**18 for x in tx.return_value]
     # wsteth_seeded, weth_seeded = [x for x in tx.return_value]
     # print(f'seeded: wsteth = {wsteth_seeded}, weth = {weth_seeded}')
 
     # liquidityAfter = 
-    assert provider.getPositionLiquidity() == LIQUIDITY
+    assert provider.getPositionLiquidity() == liquidity
 
     # currentTickAfter = provider.getCurrentPriceTick();
 

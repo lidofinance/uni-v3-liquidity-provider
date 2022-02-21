@@ -79,8 +79,8 @@ contract UniV3LiquidityProvider {
     uint24 public immutable MAX_TICK_DEVIATION;
 
     /// Desired amounts of tokens for providing liquidity to the pool
-    uint256 public immutable WSTETH_DESIRED;
-    uint256 public immutable WETH_DESIRED;
+    uint256 public immutable DESIRED_WSTETH;
+    uint256 public immutable DESIRED_WETH;
 
     /// Max deviation from desired amounts of tokens in points (percents)
     uint256 public immutable MAX_TOKEN_AMOUNT_CHANGE_POINTS;
@@ -115,26 +115,30 @@ contract UniV3LiquidityProvider {
 
     event AdminSet(address admin);
 
-    constructor() {
+
+    constructor(
+        int24 desiredTick,
+        uint256 desiredWsteth,
+        uint256 desiredWeth,
+        uint256 maxDeviationFromChainlinkPricePoints
+    ) {
+        DESIRED_TICK = desiredTick;
+        MAX_DIFF_TO_CHAINLINK_POINTS = maxDeviationFromChainlinkPricePoints;
+
         /// =======================================
         /// ========= PARAMETERS SECTION  =========
         /// =======================================
-        DESIRED_TICK = 590; // corresponds to the price 1.0608
-        uint256 wstethDesired = 4567799055347788068;
-        uint256 wethDesired = 27050750955049353294;
-
-        MAX_DIFF_TO_CHAINLINK_POINTS = 50; // 0.5%
         MAX_TICK_DEVIATION = 50; // almost corresponds to 0.5%
-        uint256 maxTokenAmountChangePoints = 200; // 2.0%
+        uint256 maxTokenAmountChangePoints = 2000; // 2.0%
         /// =======================================
 
         admin = msg.sender;
         POSITION_ID = keccak256(abi.encodePacked(address(this), POSITION_LOWER_TICK, POSITION_UPPER_TICK));
-        WSTETH_MIN = (wstethDesired * (TOTAL_POINTS - maxTokenAmountChangePoints)) / TOTAL_POINTS;
-        WETH_MIN = (wethDesired * (TOTAL_POINTS - maxTokenAmountChangePoints)) / TOTAL_POINTS;
+        WSTETH_MIN = (desiredWsteth * (TOTAL_POINTS - maxTokenAmountChangePoints)) / TOTAL_POINTS;
+        WETH_MIN = (desiredWeth * (TOTAL_POINTS - maxTokenAmountChangePoints)) / TOTAL_POINTS;
 
-        WSTETH_DESIRED = wstethDesired;
-        WETH_DESIRED = wethDesired;
+        DESIRED_WSTETH = desiredWsteth;
+        DESIRED_WETH = desiredWeth;
         MAX_TOKEN_AMOUNT_CHANGE_POINTS = maxTokenAmountChangePoints;
     }
 
@@ -160,10 +164,10 @@ contract UniV3LiquidityProvider {
         require(_deviationFromChainlinkPricePoints() <= MAX_DIFF_TO_CHAINLINK_POINTS,
             "LARGE_DEVIATION_FROM_CHAINLINK_PRICE_AT_START");
 
-        _exchangeEthForTokens(WSTETH_DESIRED, WETH_DESIRED);
+        _exchangeEthForTokens(DESIRED_WSTETH, DESIRED_WETH);
 
-        IERC20(TOKEN0).approve(address(NONFUNGIBLE_POSITION_MANAGER), WSTETH_DESIRED);
-        IERC20(TOKEN1).approve(address(NONFUNGIBLE_POSITION_MANAGER), WETH_DESIRED);
+        IERC20(TOKEN0).approve(address(NONFUNGIBLE_POSITION_MANAGER), DESIRED_WSTETH);
+        IERC20(TOKEN1).approve(address(NONFUNGIBLE_POSITION_MANAGER), DESIRED_WETH);
 
         INonfungiblePositionManager.MintParams memory params =
             INonfungiblePositionManager.MintParams({
@@ -172,8 +176,8 @@ contract UniV3LiquidityProvider {
                 fee: POOL.fee(),
                 tickLower: POSITION_LOWER_TICK,
                 tickUpper: POSITION_UPPER_TICK,
-                amount0Desired: WSTETH_DESIRED,
-                amount1Desired: WETH_DESIRED,
+                amount0Desired: DESIRED_WSTETH,
+                amount1Desired: DESIRED_WETH,
                 amount0Min: WSTETH_MIN,
                 amount1Min: WETH_MIN,
                 recipient: LIDO_AGENT,

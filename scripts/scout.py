@@ -6,7 +6,7 @@ import sys
 import os.path
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
-from config import ETH_TO_SEED, formatE18, POOL, LIQUIDITY, WSTETH_TOKEN
+from config import *
 from .utils import get_diff_in_percent, toE18, formatE18
 
 
@@ -15,7 +15,12 @@ deployer = accounts[0]
 pool = interface.IUniswapV3Pool(POOL)
 wsteth_token = interface.WSTETH(WSTETH_TOKEN)
 
-provider = TestUniV3LiquidityProvider.deploy({'from': deployer})
+provider = TestUniV3LiquidityProvider.deploy(
+    DESIRED_TICK,
+    DESIRED_WSTETH,
+    DESIRED_WETH,
+    MAX_DEVIATION_FROM_CHAINLINK_PRICE_POINTS,
+    {'from': deployer})
 
 swapper = TokensSwapper.deploy({'from': deployer})
 

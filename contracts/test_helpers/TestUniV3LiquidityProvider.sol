@@ -10,6 +10,18 @@ contract TestUniV3LiquidityProvider is
     IUniswapV3MintCallback,
     UniV3LiquidityProvider
 {
+    constructor(
+        int24 desiredTick,
+        uint256 desiredWsteth,
+        uint256 desiredWeth,
+        uint256 maxDeviationFromChainlinkPricePoints
+    ) UniV3LiquidityProvider(
+        desiredTick,
+        desiredWsteth,
+        desiredWeth,
+        maxDeviationFromChainlinkPricePoints
+    ) {
+    }
 
     function priceDeviationPoints(uint256 priceOne, uint256 priceTwo)
         public view returns (uint256 difference)
