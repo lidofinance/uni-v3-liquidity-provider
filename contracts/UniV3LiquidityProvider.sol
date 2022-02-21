@@ -54,7 +54,10 @@ contract UniV3LiquidityProvider {
 
     address public admin;
 
+    /// WstETH/Weth Uniswap V3 pool
     IUniswapV3Pool public constant POOL = IUniswapV3Pool(0xD340B57AAcDD10F96FC1CF10e15921936F41E29c);
+
+    /// Uniswap V3 contract for seeding liquidity minting position NFT for any pool
     INonfungiblePositionManager public constant NONFUNGIBLE_POSITION_MANAGER =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
 
@@ -64,7 +67,7 @@ contract UniV3LiquidityProvider {
     address public constant CHAINLINK_STETH_ETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
     address public constant LIDO_AGENT = 0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c;
 
-    uint256 public constant TOTAL_POINTS = 10000; // amount of points in 1000%
+    uint256 public constant TOTAL_POINTS = 10000; // amount of points in 100%
 
     int24 public constant POSITION_LOWER_TICK = -1630; // spot price 0.8496
     int24 public constant POSITION_UPPER_TICK = 970; // spot price 1.1019
@@ -76,7 +79,6 @@ contract UniV3LiquidityProvider {
 
     uint256 public immutable MAX_DIFF_TO_CHAINLINK_POINTS;
 
-    /// Corresponds to 0.5% price change from the price specified by DESIRED_TICK
     /// Note this value is a subject of logarithm based calculations, it is not just
     /// that "1" corresponds to 0.01% as it might seem
     uint24 public immutable MAX_TICK_DEVIATION;
@@ -122,32 +124,30 @@ contract UniV3LiquidityProvider {
         /// =======================================
         /// ========= PARAMETERS SECTION  =========
         /// =======================================
-        DESIRED_TICK = 573; // corresponds to the price 1.0592
-        uint256 wstethDesired = 4748629441952291158;
-        uint256 wethDesired = 26688112256585525215;
+        DESIRED_TICK = 590; // corresponds to the price 1.0608
+        uint256 wstethDesired = 4567799055347788068;
+        uint256 wethDesired = 27050750955049353294;
 
         MAX_DIFF_TO_CHAINLINK_POINTS = 50; // 0.5%
         MAX_TICK_DEVIATION = 50; // almost corresponds to 0.5%
-        uint256 maxTokenAmountChangePoints = 200; // 0.5%
-        /// =======================================
-        WSTETH_DESIRED = wstethDesired;
-        WETH_DESIRED = wethDesired;
-        MAX_TOKEN_AMOUNT_CHANGE_POINTS = maxTokenAmountChangePoints;
+        uint256 maxTokenAmountChangePoints = 200; // 2.0%
         /// =======================================
 
         admin = msg.sender;
-
         POSITION_ID = keccak256(abi.encodePacked(address(this), POSITION_LOWER_TICK, POSITION_UPPER_TICK));
-
         WSTETH_MIN = (wstethDesired * (TOTAL_POINTS - maxTokenAmountChangePoints)) / TOTAL_POINTS;
         WETH_MIN = (wethDesired * (TOTAL_POINTS - maxTokenAmountChangePoints)) / TOTAL_POINTS;
+
+        WSTETH_DESIRED = wstethDesired;
+        WETH_DESIRED = wethDesired;
+        MAX_TOKEN_AMOUNT_CHANGE_POINTS = maxTokenAmountChangePoints;
     }
 
     receive() external payable {
     }
 
     modifier authAdminOrDao() {
-        require(msg.sender == admin || msg.sender == LIDO_AGENT, "ONLY_ADMIN_OR_DAO_CAN");
+        require(msg.sender == admin || msg.sender == LIDO_AGENT, "AUTH_ADMIN_OR_LIDO_AGENT");
         _;
     }
 
