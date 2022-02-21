@@ -184,6 +184,8 @@ contract UniV3LiquidityProvider {
 
         (tokenId, liquidity, amount0, amount1) = NONFUNGIBLE_POSITION_MANAGER.mint(params);
 
+        require(amount0 >= WSTETH_MIN, "AMOUNT0_TOO_LITTLE");
+        require(amount1 >= WETH_MIN, "AMOUNT1_TOO_LITTLE");
         require(LIDO_AGENT == NONFUNGIBLE_POSITION_MANAGER.ownerOf(tokenId));
 
         _refundLeftoversToLidoAgent();
