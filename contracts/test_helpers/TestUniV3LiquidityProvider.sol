@@ -1,7 +1,6 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.7.0;
 
-
 import { IUniswapV3MintCallback } from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3MintCallback.sol";
 import "../UniV3LiquidityProvider.sol";
 
@@ -41,13 +40,6 @@ contract TestUniV3LiquidityProvider is
 
     function getPositionLiquidity() external view returns (uint128) {
         (uint128 liquidity, , , , ) = POOL.positions(POSITION_ID);
-        // (
-        //   liquidity,
-        //   uint256 feeGrowthInside0LastX128,
-        //   uint256 feeGrowthInside1LastX128,
-        //   uint128 tokensOwed0,
-        //   uint128 tokensOwed1
-        // ) = POOL.positions(POSITION_ID);
         return liquidity;
     }
 
@@ -86,7 +78,8 @@ contract TestUniV3LiquidityProvider is
         uint256 amount0Owed,
         uint256 amount1Owed,
         bytes calldata data
-    ) external override {
+    ) external override
+    {
         require(msg.sender == address(POOL));
         require(amount0Owed > 0, "AMOUNT0OWED_IS_ZERO");
         require(amount1Owed > 0, "AMOUNT1OWED_IS_ZERO");
@@ -99,9 +92,9 @@ contract TestUniV3LiquidityProvider is
     
 
     /**
-        * @dev We expect it not to be executed as Uniswap-v3 doesn't use safeTransferFrom
-        * Will revert if called to alert.
-        */
+     * @dev We expect it not to be executed as Uniswap-v3 doesn't use safeTransferFrom
+     * Will revert if called to alert.
+     */
     function onERC721Received(
         address operator,
         address from,
@@ -109,7 +102,6 @@ contract TestUniV3LiquidityProvider is
         bytes calldata data
     ) external override returns (bytes4)
     {
-        // TODO: remove because uni-v3 doesn't use safeTranferFrom
         require(false, "UNEXPECTED_POSITION_NFT");
 
         (, , address token0, address token1, , , , uint128 liquidity, , , , ) =
