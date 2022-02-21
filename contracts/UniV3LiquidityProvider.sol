@@ -31,18 +31,13 @@ interface ChainlinkAggregatorV3Interface {
 }
 
 
-interface IWethToken {
+interface IWETH {
     function deposit() external payable;
     function withdraw(uint wad) external;
 }
 
 
-interface StETH {
-    function submit(address _referral) external payable returns (uint256);
-}
-
-
-interface WstETH {
+interface IWstETH {
     function wrap(uint256 _stETHAmount) external returns (uint256);
     function unwrap(uint256 _stETHAmount) external returns (uint256);
     function stEthPerToken() external view returns (uint256);
@@ -162,7 +157,8 @@ contract UniV3LiquidityProvider {
         uint128 liquidity,
         uint256 tokenId
     ) {
-        require(_deviationFromChainlinkPricePoints() <= MAX_DIFF_TO_CHAINLINK_POINTS, "LARGE_DEVIATION_FROM_CHAINLINK_PRICE_AT_START");
+        require(_deviationFromChainlinkPricePoints() <= MAX_DIFF_TO_CHAINLINK_POINTS,
+            "LARGE_DEVIATION_FROM_CHAINLINK_PRICE_AT_START");
 
         _exchangeEthForTokens(WSTETH_DESIRED, WETH_DESIRED);
 
@@ -180,7 +176,7 @@ contract UniV3LiquidityProvider {
                 amount1Desired: WETH_DESIRED,
                 amount0Min: WSTETH_MIN,
                 amount1Min: WETH_MIN,
-                recipient: LIDO_AGENT, //address(this),
+                recipient: LIDO_AGENT,
                 deadline: block.timestamp
             });
 
@@ -209,7 +205,7 @@ contract UniV3LiquidityProvider {
      */
     function withdrawERC721(address _token, uint256 _tokenId) external authAdminOrDao() {
         emit ERC721Withdrawn(msg.sender, _token, _tokenId);
-        // Doesn't return bool as `transfer` for ERC20 does, because it performs 'requrie' check inside
+        // Doesn't return bool as `transfer` for ERC20 does, because it performs 'require' check inside
         IERC721(_token).safeTransferFrom(address(this), LIDO_AGENT, _tokenId);
     }
 
@@ -236,7 +232,7 @@ contract UniV3LiquidityProvider {
 
         assert(timeStamp != 0);
         uint256 ethPerSteth = uint256(price) * 10**(18 - priceDecimals);
-        uint256 stethPerWsteth = WstETH(TOKEN0).stEthPerToken();
+        uint256 stethPerWsteth = IWstETH(TOKEN0).stEthPerToken();
         return (ethPerSteth * stethPerWsteth) / 1e18;
     }
 
@@ -246,7 +242,7 @@ contract UniV3LiquidityProvider {
     }
 
     function _getAmountOfEthForWsteth(uint256 _amountOfWsteth) internal view returns (uint256) {
-        return (_amountOfWsteth * WstETH(TOKEN0).stEthPerToken()) / 1e18;
+        return (_amountOfWsteth * IWstETH(TOKEN0).stEthPerToken()) / 1e18;
     }
 
     function _exchangeEthForTokens(uint256 amount0, uint256 amount1) internal {
@@ -258,16 +254,16 @@ contract UniV3LiquidityProvider {
 
         (bool success, ) = TOKEN0.call{value: ethForWsteth}("");
         require(success, "WSTETH_MINTING_FAILED");
-        IWethToken(TOKEN1).deposit{value: ethForWeth}();
+        IWETH(TOKEN1).deposit{value: ethForWeth}();
         require(IERC20(TOKEN0).balanceOf(address(this)) >= amount0, "NOT_ENOUGH_WSTETH");
         require(IERC20(TOKEN1).balanceOf(address(this)) >= amount1, "NOT_ENOUGH_WETH");
     }
 
     function _refundLeftoversToLidoAgent() internal {
-        WstETH(TOKEN0).unwrap(IERC20(TOKEN0).balanceOf(address(this)));
+        IWstETH(TOKEN0).unwrap(IERC20(TOKEN0).balanceOf(address(this)));
         _withdrawERC20(STETH_TOKEN, IERC20(STETH_TOKEN).balanceOf(address(this)));
 
-        IWethToken(TOKEN1).withdraw(IERC20(TOKEN1).balanceOf(address(this)));
+        IWETH(TOKEN1).withdraw(IERC20(TOKEN1).balanceOf(address(this)));
 
         _withdrawETH();
     }

@@ -59,8 +59,8 @@ contract TestUniV3LiquidityProvider is
         uint256 token0Seeded,
         uint256 token1Seeded
     ) {
-        require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_MOVEMENT_TOO_LARGE_AT_START");
-        require(_deviationFromChainlinkPricePoints() <= MAX_DIFF_TO_CHAINLINK_POINTS, "LARGE_DIFFERENCE_TO_CHAINLINK_PRICE_AT_START");
+        // require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_MOVEMENT_TOO_LARGE_AT_START");
+        // require(_deviationFromChainlinkPricePoints() <= MAX_DIFF_TO_CHAINLINK_POINTS, "LARGE_DIFFERENCE_TO_CHAINLINK_PRICE_AT_START");
 
         (token0Seeded, token1Seeded) = POOL.mint(
             address(this),
@@ -70,8 +70,8 @@ contract TestUniV3LiquidityProvider is
             abi.encode(msg.sender) // Data field for uniswapV3MintCallback
         );
 
-        require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_MOVEMENT_TOO_LARGE");
-        require(_deviationFromChainlinkPricePoints() <= MAX_DIFF_TO_CHAINLINK_POINTS, "LARGE_DIFFERENCE_TO_CHAINLINK_PRICE");
+        // require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_MOVEMENT_TOO_LARGE");
+        // require(_deviationFromChainlinkPricePoints() <= MAX_DIFF_TO_CHAINLINK_POINTS, "LARGE_DIFFERENCE_TO_CHAINLINK_PRICE");
     }
 
     function uniswapV3MintCallback(
