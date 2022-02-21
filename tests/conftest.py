@@ -44,6 +44,8 @@ def provider(deployer, TestUniV3LiquidityProvider):
         config.DESIRED_WSTETH,
         config.DESIRED_WETH,
         config.MAX_DEVIATION_FROM_CHAINLINK_PRICE_POINTS,
+        config.MAX_TICK_DEVIATION,
+        config.MAX_TOKEN_AMOUNT_CHANGE_POINTS,
         {'from': deployer})
 
 # making scope 'module' causes "This contract no longer exists" errors

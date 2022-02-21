@@ -72,10 +72,10 @@ contract UniV3LiquidityProvider {
     /// The pool price tick we'd like not to be moved too far away from
     int24 public immutable DESIRED_TICK;
 
-    uint256 public immutable MAX_DIFF_TO_CHAINLINK_POINTS;
+    uint256 public immutable MAX_DEVIATION_FROM_CHAINLINK_POINTS;
 
     /// Note this value is a subject of logarithm based calculations, it is not just
-    /// that "1" corresponds to 0.01% as it might seem
+    /// that "1" corresponds to 0.01% as it might seem. But might be very close at current price
     uint24 public immutable MAX_TICK_DEVIATION;
 
     /// Desired amounts of tokens for providing liquidity to the pool
@@ -120,26 +120,23 @@ contract UniV3LiquidityProvider {
         int24 desiredTick,
         uint256 desiredWsteth,
         uint256 desiredWeth,
-        uint256 maxDeviationFromChainlinkPricePoints
+        uint256 maxDeviationFromChainlinkPricePoints,
+        uint24 maxTickDeviation,
+        uint256 maxTokenAmountChangePoints
     ) {
-        DESIRED_TICK = desiredTick;
-        MAX_DIFF_TO_CHAINLINK_POINTS = maxDeviationFromChainlinkPricePoints;
-
-        /// =======================================
-        /// ========= PARAMETERS SECTION  =========
-        /// =======================================
-        MAX_TICK_DEVIATION = 50; // almost corresponds to 0.5%
-        uint256 maxTokenAmountChangePoints = 2000; // 2.0%
-        /// =======================================
-
         admin = msg.sender;
-        POSITION_ID = keccak256(abi.encodePacked(address(this), POSITION_LOWER_TICK, POSITION_UPPER_TICK));
-        WSTETH_MIN = (desiredWsteth * (TOTAL_POINTS - maxTokenAmountChangePoints)) / TOTAL_POINTS;
-        WETH_MIN = (desiredWeth * (TOTAL_POINTS - maxTokenAmountChangePoints)) / TOTAL_POINTS;
 
+        POSITION_ID = keccak256(abi.encodePacked(address(this), POSITION_LOWER_TICK, POSITION_UPPER_TICK));
+
+        DESIRED_TICK = desiredTick;
+        MAX_DEVIATION_FROM_CHAINLINK_POINTS = maxDeviationFromChainlinkPricePoints;
+        MAX_TOKEN_AMOUNT_CHANGE_POINTS = maxTokenAmountChangePoints;
+        MAX_TICK_DEVIATION = maxTickDeviation;
         DESIRED_WSTETH = desiredWsteth;
         DESIRED_WETH = desiredWeth;
-        MAX_TOKEN_AMOUNT_CHANGE_POINTS = maxTokenAmountChangePoints;
+
+        WSTETH_MIN = (desiredWsteth * (TOTAL_POINTS - maxTokenAmountChangePoints)) / TOTAL_POINTS;
+        WETH_MIN = (desiredWeth * (TOTAL_POINTS - maxTokenAmountChangePoints)) / TOTAL_POINTS;
     }
 
     receive() external payable {
@@ -161,8 +158,9 @@ contract UniV3LiquidityProvider {
         uint128 liquidity,
         uint256 tokenId
     ) {
-        require(_deviationFromChainlinkPricePoints() <= MAX_DIFF_TO_CHAINLINK_POINTS,
+        require(_deviationFromChainlinkPricePoints() <= MAX_DEVIATION_FROM_CHAINLINK_POINTS,
             "LARGE_DEVIATION_FROM_CHAINLINK_PRICE_AT_START");
+        require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_MOVED_TOO_MUCH_AT_START");
 
         _exchangeEthForTokens(DESIRED_WSTETH, DESIRED_WETH);
 

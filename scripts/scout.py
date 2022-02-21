@@ -20,6 +20,8 @@ provider = TestUniV3LiquidityProvider.deploy(
     DESIRED_WSTETH,
     DESIRED_WETH,
     MAX_DEVIATION_FROM_CHAINLINK_PRICE_POINTS,
+    MAX_TICK_DEVIATION,
+    MAX_TOKEN_AMOUNT_CHANGE_POINTS,
     {'from': deployer})
 
 swapper = TokensSwapper.deploy({'from': deployer})

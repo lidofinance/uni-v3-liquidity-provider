@@ -14,12 +14,16 @@ contract TestUniV3LiquidityProvider is
         int24 desiredTick,
         uint256 desiredWsteth,
         uint256 desiredWeth,
-        uint256 maxDeviationFromChainlinkPricePoints
+        uint256 maxDeviationFromChainlinkPricePoints,
+        uint24 maxTickDeviation,
+        uint256 maxTokenAmountChangePoints
     ) UniV3LiquidityProvider(
         desiredTick,
         desiredWsteth,
         desiredWeth,
-        maxDeviationFromChainlinkPricePoints
+        maxDeviationFromChainlinkPricePoints,
+        maxTickDeviation,
+        maxTokenAmountChangePoints
     ) {
     }
 
