@@ -180,16 +180,12 @@ contract UniV3LiquidityProvider {
                 amount1Desired: WETH_DESIRED,
                 amount0Min: WSTETH_MIN,
                 amount1Min: WETH_MIN,
-                recipient: address(this),
+                recipient: LIDO_AGENT, //address(this),
                 deadline: block.timestamp
             });
 
-        // TODO: specify LIDO_AGENT as the recipient at once?
         (tokenId, liquidity, amount0, amount1) = NONFUNGIBLE_POSITION_MANAGER.mint(params);
 
-        // check and transfer position NFT
-        require(address(this) == NONFUNGIBLE_POSITION_MANAGER.ownerOf(tokenId));
-        NONFUNGIBLE_POSITION_MANAGER.safeTransferFrom(address(this), LIDO_AGENT, tokenId);
         require(LIDO_AGENT == NONFUNGIBLE_POSITION_MANAGER.ownerOf(tokenId));
 
         _refundLeftoversToLidoAgent();
