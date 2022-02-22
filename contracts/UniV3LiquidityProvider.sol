@@ -72,6 +72,7 @@ contract UniV3LiquidityProvider {
     /// The pool price tick we'd like not to be moved too far away from
     int24 public immutable DESIRED_TICK;
 
+    /// Max deviation from chainlink-based price % (expressed in points)
     uint256 public immutable MAX_DEVIATION_FROM_CHAINLINK_POINTS;
 
     /// Note this value is a subject of logarithm based calculations, it is not just
@@ -124,7 +125,6 @@ contract UniV3LiquidityProvider {
 
     event AdminSet(address admin);
 
-
     constructor(
         int24 desiredTick,
         uint256 desiredWsteth,
@@ -169,7 +169,7 @@ contract UniV3LiquidityProvider {
     ) {
         require(_deviationFromChainlinkPricePoints() <= MAX_DEVIATION_FROM_CHAINLINK_POINTS,
             "LARGE_DEVIATION_FROM_CHAINLINK_PRICE_AT_START");
-        require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_MOVED_TOO_MUCH_AT_START");
+        require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_DEVIATION_TOO_MUCH_AT_START");
 
         _exchangeEthForTokens(DESIRED_WSTETH, DESIRED_WETH);
 
@@ -239,13 +239,19 @@ contract UniV3LiquidityProvider {
         require(success);
     }
 
+    /// Need to separate into a virtual function only for testing purposes
+    function _getChainlinkFeedLatestRoundDataPrice() internal view virtual returns (int256) {
+        ( , int256 price, , uint256 timeStamp, ) = ChainlinkAggregatorV3Interface(CHAINLINK_STETH_ETH_PRICE_FEED).latestRoundData();
+        assert(timeStamp != 0);
+        return price;
+    }
+
     function _getChainlinkBasedWstethPrice() internal view returns (uint256) {
         uint256 priceDecimals = ChainlinkAggregatorV3Interface(CHAINLINK_STETH_ETH_PRICE_FEED).decimals();
         assert(0 < priceDecimals && priceDecimals <= 18);
 
-        ( , int price, , uint timeStamp, ) = ChainlinkAggregatorV3Interface(CHAINLINK_STETH_ETH_PRICE_FEED).latestRoundData();
+        int price = _getChainlinkFeedLatestRoundDataPrice();
 
-        assert(timeStamp != 0);
         uint256 ethPerSteth = uint256(price) * 10**(18 - priceDecimals);
         uint256 stethPerWsteth = IWstETH(TOKEN0).stEthPerToken();
         return (ethPerSteth * stethPerWsteth) / 1e18;

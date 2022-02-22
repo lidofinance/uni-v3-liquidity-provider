@@ -10,6 +10,8 @@ contract TestUniV3LiquidityProvider is
     IUniswapV3MintCallback,
     UniV3LiquidityProvider
 {
+    int256 public chainlinkOverriddenPrice;
+
     constructor(
         int24 desiredTick,
         uint256 desiredWsteth,
@@ -25,6 +27,10 @@ contract TestUniV3LiquidityProvider is
         maxTickDeviation,
         maxTokenAmountChangePoints
     ) {
+    }
+
+    function setChainlinkPrice(int256 _price) external {
+        chainlinkOverriddenPrice = _price;
     }
 
     function priceDeviationPoints(uint256 priceOne, uint256 priceTwo)
@@ -43,6 +49,10 @@ contract TestUniV3LiquidityProvider is
     
     function getChainlinkBasedWstethPrice() external view returns (uint256) {
         return _getChainlinkBasedWstethPrice();
+    }
+
+    function getChainlinkFeedLatestRoundDataPrice() external view returns (int256) {
+        return _getChainlinkFeedLatestRoundDataPrice();
     }
 
     function getCurrentPriceTick() external view returns (int24) {
@@ -124,6 +134,14 @@ contract TestUniV3LiquidityProvider is
             NONFUNGIBLE_POSITION_MANAGER.positions(tokenId);
         
         return this.onERC721Received.selector;
+    }
+
+    function _getChainlinkFeedLatestRoundDataPrice() internal view override returns (int256) {
+        if (0 == chainlinkOverriddenPrice) {
+            return super._getChainlinkFeedLatestRoundDataPrice();
+        } else {
+            return chainlinkOverriddenPrice;
+        }
     }
 
 }

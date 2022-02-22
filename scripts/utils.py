@@ -1,4 +1,5 @@
 from brownie import Contract
+from math import floor
 
 
 def toE18(x):
@@ -6,7 +7,7 @@ def toE18(x):
 
 def formatE18(num):
     floating_num = num / 1e18
-    return f'{floating_num:.4f} ({num})'
+    return f'{floating_num:.4f} ({floor(num)})'
 
 def get_balance(address):
     return Contract.from_abi("Foo", address, "").balance()

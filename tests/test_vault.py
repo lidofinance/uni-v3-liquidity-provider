@@ -131,23 +131,56 @@ def test_mint_happy_path(deployer, provider, steth_token, wsteth_token, weth_tok
     # print(f'position liquidity (before/after): {liquidityBefore}/{liquidityAfter}')
 
 
-def disabled_test_mint_succeeds_if_small_price_deviation(deployer, provider, swapper):
+def test_mint_succeeds_if_small_tick_deviation(deployer, provider, swapper):
     deployer.transfer(provider.address, ETH_TO_SEED)
 
-    weth_to_swap = toE18(30)  # will cause ~ 18 ticks movement at the time or writing the test
+    weth_to_swap = toE18(20)
 
     tickBefore = provider.getCurrentPriceTick();
     swapper.swapWeth({'from': deployer, 'value': weth_to_swap})
     tickAfter = provider.getCurrentPriceTick();
 
-    assert abs(tickAfter - provider.DESIRED_TICK()) < provider.MAX_TICK_DEVIATION()
-    # assert abs(tickBefore - tickAfter) < provider.
+    print(f'tick (before/after): {tickBefore}/{tickAfter}')
 
-    print(f'currentPriceTick (before/after): {tickBefore}/{tickAfter}')
+    assert abs(tickAfter - provider.DESIRED_TICK()) < (provider.MAX_TICK_DEVIATION() // 3)
 
     tx = provider.mint()
     token_id, liquidity, amount0, amount1 = tx.return_value
     assert provider.getPositionTokenOwner(token_id) == LIDO_AGENT
+
+
+def test_mint_fails_if_large_tick_deviation(deployer, provider, swapper):
+    deployer.transfer(provider.address, ETH_TO_SEED)
+
+    weth_to_swap = toE18(80)
+
+    tickBefore = provider.getCurrentPriceTick();
+    swapper.swapWeth({'from': deployer, 'value': weth_to_swap})
+    tickAfter = provider.getCurrentPriceTick();
+
+    print(f'tick (before/after): {tickBefore}/{tickAfter}')
+    updatedChainlinkPrice = round(provider.getChainlinkFeedLatestRoundDataPrice() \
+        * (1 + provider.MAX_DEVIATION_FROM_CHAINLINK_POINTS() / provider.TOTAL_POINTS())
+    )
+    provider.setChainlinkPrice(updatedChainlinkPrice)
+
+    assert abs(tickAfter - provider.DESIRED_TICK()) > provider.MAX_TICK_DEVIATION()
+
+    with reverts('TICK_DEVIATION_TOO_MUCH_AT_START'):
+        provider.mint()
+
+
+def test_mint_fails_if_large_deviation_from_chainlink_price(deployer, provider, swapper):
+    deployer.transfer(provider.address, ETH_TO_SEED)
+
+    deviationPoints = 2 * provider.MAX_DEVIATION_FROM_CHAINLINK_POINTS()
+    updatedChainlinkPrice = round(provider.getChainlinkFeedLatestRoundDataPrice() \
+        * (1 + deviationPoints / provider.TOTAL_POINTS())
+    )
+    provider.setChainlinkPrice(updatedChainlinkPrice)
+
+    with reverts('LARGE_DEVIATION_FROM_CHAINLINK_PRICE_AT_START'):
+        provider.mint()
 
 
 def test_exchange_for_tokens(deployer, provider, wsteth_token, weth_token):
