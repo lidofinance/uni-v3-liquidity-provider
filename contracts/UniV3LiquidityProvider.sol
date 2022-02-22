@@ -90,6 +90,15 @@ contract UniV3LiquidityProvider {
     uint256 public immutable WSTETH_MIN;
     uint256 public immutable WETH_MIN;
 
+    /// Emitted when liquidity provided to UniswapV3 pool and
+    /// liquidity position NFT is minted
+    event LiquidityProvided(
+        uint256 tokenId,
+        uint128 liquidity,
+        uint256 wstethAmount,
+        uint256 wethAmount
+    );
+
     /// Emitted when ETH is withdrawn to Lido agent contract
     event EthWithdrawn(address requestedBy, uint256 amount);
 
@@ -153,10 +162,10 @@ contract UniV3LiquidityProvider {
     }
 
     function mint() external returns (
-        uint256 amount0,
-        uint256 amount1,
+        uint256 tokenId,
         uint128 liquidity,
-        uint256 tokenId
+        uint256 amount0,
+        uint256 amount1
     ) {
         require(_deviationFromChainlinkPricePoints() <= MAX_DEVIATION_FROM_CHAINLINK_POINTS,
             "LARGE_DEVIATION_FROM_CHAINLINK_PRICE_AT_START");
@@ -184,6 +193,8 @@ contract UniV3LiquidityProvider {
 
         (tokenId, liquidity, amount0, amount1) = NONFUNGIBLE_POSITION_MANAGER.mint(params);
 
+        emit LiquidityProvided(tokenId, liquidity, amount0, amount1);
+
         require(amount0 >= WSTETH_MIN, "AMOUNT0_TOO_LITTLE");
         require(amount1 >= WETH_MIN, "AMOUNT1_TOO_LITTLE");
         require(LIDO_AGENT == NONFUNGIBLE_POSITION_MANAGER.ownerOf(tokenId));
@@ -192,7 +203,7 @@ contract UniV3LiquidityProvider {
     }
 
     /**
-     * Transfers given amount of the ERC20-token to Lido agent;
+     * Transfers given amount of the ERC20-token to Lido agent
      *
      * @param _token an ERC20-compatible token
      * @param _amount amount of the token

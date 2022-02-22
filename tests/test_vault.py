@@ -107,7 +107,7 @@ def test_mint_happy_path(deployer, provider, steth_token, wsteth_token, weth_tok
     with assert_leftovers_refunded(provider, steth_token, wsteth_token,
                                    weth_token, lido_agent, need_check_agent_balance=False):
         tx = provider.mint()
-        amount0, amount1, liquidity, token_id = tx.return_value
+        token_id, liquidity, amount0, amount1 = tx.return_value
         pprint({
             'wsteth_used': formatE18(amount0),
             'weth_used': formatE18(amount1),
@@ -146,7 +146,7 @@ def disabled_test_mint_succeeds_if_small_price_deviation(deployer, provider, swa
     print(f'currentPriceTick (before/after): {tickBefore}/{tickAfter}')
 
     tx = provider.mint()
-    amount0, amount1, liquidity, token_id = tx.return_value
+    token_id, liquidity, amount0, amount1 = tx.return_value
     assert provider.getPositionTokenOwner(token_id) == LIDO_AGENT
 
 
