@@ -5,7 +5,7 @@ import sys
 import os.path
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
-import config
+from config import *
 
 
 @pytest.fixture(scope='function', autouse=True)
@@ -19,33 +19,31 @@ def deployer(accounts):
 
 @pytest.fixture(scope='module')
 def steth_token(interface):
-    return interface.ERC20(config.STETH_TOKEN)
+    return interface.ERC20(STETH_TOKEN)
 
 @pytest.fixture(scope='module')
 def weth_token(interface):
-    return interface.WETH(config.WETH_TOKEN)
+    return interface.WETH(WETH_TOKEN)
 
 @pytest.fixture(scope='module')
 def wsteth_token(interface):
-    return interface.WSTETH(config.WSTETH_TOKEN)
+    return interface.WSTETH(WSTETH_TOKEN)
 
 @pytest.fixture(scope='module')
 def pool(interface):
-    return interface.IUniswapV3PoolActions(config.POOL)
+    return interface.IUniswapV3Pool(POOL)
 
 @pytest.fixture(scope='module')
 def lido_agent():
-    return Contract.from_abi("Foo", config.LIDO_AGENT, "")
+    return Contract.from_abi("Foo", LIDO_AGENT, "")
 
 @pytest.fixture(scope='function')
 def provider(deployer, TestUniV3LiquidityProvider):
     return TestUniV3LiquidityProvider.deploy(
-        config.DESIRED_TICK,
-        config.DESIRED_WSTETH,
-        config.DESIRED_WETH,
-        config.MAX_DEVIATION_FROM_CHAINLINK_PRICE_POINTS,
-        config.MAX_TICK_DEVIATION,
-        config.MAX_TOKEN_AMOUNT_CHANGE_POINTS,
+        ETH_TO_SEED,
+        INITIAL_DESIRED_TICK,
+        MAX_TICK_DEVIATION,
+        MAX_ALLOWED_DESIRED_TICK_CHANGE,
         {'from': deployer})
 
 # making scope 'module' causes "This contract no longer exists" errors

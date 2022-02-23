@@ -1,4 +1,3 @@
-# from brownie import accounts, interface, contract
 from brownie import *
 from pprint import pprint
 
@@ -16,12 +15,10 @@ pool = interface.IUniswapV3Pool(POOL)
 wsteth_token = interface.WSTETH(WSTETH_TOKEN)
 
 provider = TestUniV3LiquidityProvider.deploy(
+    ETH_TO_SEED,
     DESIRED_TICK,
-    DESIRED_WSTETH,
-    DESIRED_WETH,
-    MAX_DEVIATION_FROM_CHAINLINK_PRICE_POINTS,
     MAX_TICK_DEVIATION,
-    MAX_TOKEN_AMOUNT_CHANGE_POINTS,
+    MAX_ALLOWED_DESIRED_TICK_CHANGE,
     {'from': deployer})
 
 swapper = TokensSwapper.deploy({'from': deployer})
@@ -98,7 +95,7 @@ def dev():
 def main_swap_wsteth():
     swapper.swapWsteth({'from': deployer, 'value': toE18(10.4)})
 
-    wsteth_amount, weth_amount = calc_token_amounts(ETH_TO_SEED)
+    wsteth_amount, weth_amount = calc_token_amounts(ETH_TO_SEED - provider.ETH_AMOUNT_MARGIN())
 
     eth_used = wsteth_amount * wsteth_token.stEthPerToken() / 1e18  + weth_amount
 
@@ -115,7 +112,7 @@ def main_swap_wsteth():
 def main_swap_weth():
     swapper.swapWeth({'from': deployer, 'value': toE18(75)})
 
-    wsteth_amount, weth_amount = calc_token_amounts(ETH_TO_SEED)
+    wsteth_amount, weth_amount = calc_token_amounts(ETH_TO_SEED - provider.ETH_AMOUNT_MARGIN())
 
     eth_used = wsteth_amount * wsteth_token.stEthPerToken() / 1e18  + weth_amount
 
@@ -130,7 +127,7 @@ def main_swap_weth():
 
 
 def main():
-    wsteth_amount, weth_amount = calc_token_amounts(ETH_TO_SEED)
+    wsteth_amount, weth_amount = calc_token_amounts(ETH_TO_SEED - provider.ETH_AMOUNT_MARGIN())
 
     eth_used = wsteth_amount * wsteth_token.stEthPerToken() / 1e18  + weth_amount
 

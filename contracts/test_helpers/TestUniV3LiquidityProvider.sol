@@ -13,20 +13,31 @@ contract TestUniV3LiquidityProvider is
     int256 public chainlinkOverriddenPrice;
 
     constructor(
-        int24 desiredTick,
-        uint256 desiredWsteth,
-        uint256 desiredWeth,
-        uint256 maxDeviationFromChainlinkPricePoints,
-        uint24 maxTickDeviation,
-        uint256 maxTokenAmountChangePoints
+        uint256 _ethAmount,
+        int24 _desiredTick,
+        uint24 _maxTickDeviation,
+        uint24 _maxAllowedDesiredTickChange
     ) UniV3LiquidityProvider(
-        desiredTick,
-        desiredWsteth,
-        desiredWeth,
-        maxDeviationFromChainlinkPricePoints,
-        maxTickDeviation,
-        maxTokenAmountChangePoints
+        _ethAmount,
+        _desiredTick,
+        _maxTickDeviation,
+        _maxAllowedDesiredTickChange
     ) {
+    }
+
+    /// returns wstEthOverWEthRatio
+    function calcDesiredTokensRatio(int24 _tick) external view returns (uint256) {
+        return _calcDesiredTokensRatio(_tick);
+    }
+
+    function calcDesiredTokenAmounts(int24 _tick, uint256 _ethAmount) external view
+        returns (uint256 amount0, uint256 amount1)
+    {
+        (amount0, amount1) = _calcDesiredTokenAmounts(_tick, _ethAmount);
+    }
+
+    function calcDesiredAndMinTokenAmounts() external {
+        _calcDesiredAndMinTokenAmounts();
     }
 
     function setChainlinkPrice(int256 _price) external {
@@ -77,8 +88,31 @@ contract TestUniV3LiquidityProvider is
         _refundLeftoversToLidoAgent();
     }
 
-    function exchangeEthForTokens(uint256 amount0, uint256 amount1) external {
-        _exchangeEthForTokens(amount0, amount1);
+    function wrapEthToTokens(uint256 amount0, uint256 amount1) external {
+        _wrapEthToTokens(amount0, amount1);
+    }
+
+    function getPositionInfo(uint256 _tokenId) external view returns (
+        uint128 liquidity,
+        uint128 tokensOwed0,
+        uint128 tokensOwed1,
+        int24 tickLower,
+        int24 tickUpper
+    ){
+        (
+            ,
+            address operator,
+            ,
+            ,
+            ,
+            int24 tickLower,
+            int24 tickUpper,
+            uint128 liquidity,
+            ,
+            ,
+            uint128 tokensOwed0,
+            uint128 tokensOwed1
+        ) = NONFUNGIBLE_POSITION_MANAGER.positions(_tokenId);
     }
 
     function calcTokenAmounts(uint128 _liquidity) external authAdminOrDao() returns (
@@ -110,7 +144,7 @@ contract TestUniV3LiquidityProvider is
         require(amount0Owed > 0, "AMOUNT0OWED_IS_ZERO");
         require(amount1Owed > 0, "AMOUNT1OWED_IS_ZERO");
 
-        _exchangeEthForTokens(amount0Owed, amount1Owed);
+        _wrapEthToTokens(amount0Owed, amount1Owed);
 
         TransferHelper.safeTransfer(TOKEN0, address(POOL), amount0Owed);
         TransferHelper.safeTransfer(TOKEN1, address(POOL), amount1Owed);
