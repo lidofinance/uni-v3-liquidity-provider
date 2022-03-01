@@ -321,19 +321,18 @@ contract UniV3LiquidityProvider {
         return (_amountOfWsteth * IWstETH(TOKEN0).stEthPerToken()) / 1e18;
     }
 
-    // TODO: rename exchange to something
-    function _wrapEthToTokens(uint256 amount0, uint256 amount1) internal {
+    function _wrapEthToTokens(uint256 _amount0, uint256 _amount1) internal {
         // Need to add 1 wei because the last point of stETH cannot be transferred
         // TODO: why for larger amounts of tokens we need more wei??
-        uint256 ethForWsteth = 1000 + _getAmountOfEthForWsteth(amount0);
-        uint256 ethForWeth = amount1;
+        uint256 ethForWsteth = 1000 + _getAmountOfEthForWsteth(_amount0);
+        uint256 ethForWeth = _amount1;
         require(address(this).balance >= ethForWsteth + ethForWeth, "NOT_ENOUGH_ETH");
 
         (bool success, ) = TOKEN0.call{value: ethForWsteth}("");
         require(success, "WSTETH_MINTING_FAILED");
         IWETH(TOKEN1).deposit{value: ethForWeth}();
-        require(IERC20(TOKEN0).balanceOf(address(this)) >= amount0, "NOT_ENOUGH_WSTETH");
-        require(IERC20(TOKEN1).balanceOf(address(this)) >= amount1, "NOT_ENOUGH_WETH");
+        require(IERC20(TOKEN0).balanceOf(address(this)) >= _amount0, "NOT_ENOUGH_WSTETH");
+        require(IERC20(TOKEN1).balanceOf(address(this)) >= _amount1, "NOT_ENOUGH_WETH");
     }
 
     function _refundLeftoversToLidoAgent() internal {
@@ -352,16 +351,16 @@ contract UniV3LiquidityProvider {
             : uint24(desiredTick - currentTick);
     }
 
-    function _priceDeviationPoints(uint256 basePrice, uint256 price)
+    function _priceDeviationPoints(uint256 _basePrice, uint256 _price)
         internal view returns (uint256 difference)
     {
-        require(basePrice > 0, "ZERO_BASE_PRICE");
+        require(_basePrice > 0, "ZERO_BASE_PRICE");
 
-        uint256 absDiff = basePrice > price
-            ? basePrice - price
-            : price - basePrice;
+        uint256 absDiff = _basePrice > _price
+            ? _basePrice - _price
+            : _price - _basePrice;
 
-        return (absDiff * TOTAL_POINTS) / basePrice;
+        return (absDiff * TOTAL_POINTS) / _basePrice;
     }
 
     function _deviationFromChainlinkPricePoints() internal view returns (uint256) {

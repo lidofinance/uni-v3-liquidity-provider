@@ -44,10 +44,10 @@ contract TestUniV3LiquidityProvider is
         chainlinkOverriddenPrice = _price;
     }
 
-    function priceDeviationPoints(uint256 priceOne, uint256 priceTwo)
+    function priceDeviationPoints(uint256 _priceOne, uint256 _priceTwo)
         public view returns (uint256 difference)
     {
-        return _priceDeviationPoints(priceOne, priceTwo);
+        return _priceDeviationPoints(_priceOne, _priceTwo);
     }
 
     function deviationFromDesiredTick() external view returns (uint24) {
@@ -88,8 +88,8 @@ contract TestUniV3LiquidityProvider is
         _refundLeftoversToLidoAgent();
     }
 
-    function wrapEthToTokens(uint256 amount0, uint256 amount1) external {
-        _wrapEthToTokens(amount0, amount1);
+    function wrapEthToTokens(uint256 _amount0, uint256 _amount1) external {
+        _wrapEthToTokens(_amount0, _amount1);
     }
 
     function getPositionInfo(uint256 _tokenId) external view returns (
@@ -135,19 +135,19 @@ contract TestUniV3LiquidityProvider is
     }
 
     function uniswapV3MintCallback(
-        uint256 amount0Owed,
-        uint256 amount1Owed,
-        bytes calldata data
+        uint256 _amount0Owed,
+        uint256 _amount1Owed,
+        bytes calldata _data
     ) external override
     {
         require(msg.sender == address(POOL));
-        require(amount0Owed > 0, "AMOUNT0OWED_IS_ZERO");
-        require(amount1Owed > 0, "AMOUNT1OWED_IS_ZERO");
+        require(_amount0Owed > 0, "AMOUNT0OWED_IS_ZERO");
+        require(_amount1Owed > 0, "AMOUNT1OWED_IS_ZERO");
 
-        _wrapEthToTokens(amount0Owed, amount1Owed);
+        _wrapEthToTokens(_amount0Owed, _amount1Owed);
 
-        TransferHelper.safeTransfer(TOKEN0, address(POOL), amount0Owed);
-        TransferHelper.safeTransfer(TOKEN1, address(POOL), amount1Owed);
+        TransferHelper.safeTransfer(TOKEN0, address(POOL), _amount0Owed);
+        TransferHelper.safeTransfer(TOKEN1, address(POOL), _amount1Owed);
     }
     
 
@@ -156,16 +156,16 @@ contract TestUniV3LiquidityProvider is
      * Will revert if called to alert.
      */
     function onERC721Received(
-        address operator,
-        address from,
-        uint256 tokenId,
+        address _operator,
+        address _from,
+        uint256 _tokenId,
         bytes calldata data
     ) external override returns (bytes4)
     {
         require(false, "UNEXPECTED_POSITION_NFT");
 
         (, , address token0, address token1, , , , uint128 liquidity, , , , ) =
-            NONFUNGIBLE_POSITION_MANAGER.positions(tokenId);
+            NONFUNGIBLE_POSITION_MANAGER.positions(_tokenId);
         
         return this.onERC721Received.selector;
     }
