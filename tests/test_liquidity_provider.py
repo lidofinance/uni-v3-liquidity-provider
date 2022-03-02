@@ -66,6 +66,10 @@ def test_addresses(provider):
     assert_contract_params_after_deployment(provider)
 
 
+def test_addresses(provider):
+    assert_contract_params_after_deployment(provider)
+
+
 def test_deploy_script(deployer, UniV3LiquidityProvider):
     scripts.deploy.main(deployer)
     contract_address = read_deploy_address()
@@ -114,7 +118,29 @@ def test_getAmountOfEthForWsteth(provider):
     assert 1.06 < r < 1.07  # just sanity check
 
 
-def test_refundERC20(deployer, provider, weth_token):
+def test_refundETH(deployer, provider, helpers):
+    balance_before = get_balance(LIDO_AGENT)
+    amount1 = toE18(1)
+    amount2 = toE18(2)
+
+    with reverts('AUTH_ADMIN_OR_LIDO_AGENT'):
+        provider.refundETH({'from': accounts[2]})
+
+    deployer.transfer(provider.address, amount1)
+    tx = provider.refundETH()
+    helpers.assert_single_event_named('EthRefunded', tx, source=provider.address,
+        evt_keys_dict = {'requestedBy': deployer.address, 'amount': amount1})
+
+    deployer.transfer(provider.address, amount2)
+    tx = provider.refundETH({'from': LIDO_AGENT})
+    helpers.assert_single_event_named('EthRefunded', tx, source=provider.address,
+        evt_keys_dict = {'requestedBy': LIDO_AGENT, 'amount': amount2})
+
+    assert balance_before + (amount1 + amount2) == get_balance(LIDO_AGENT)
+    assert provider.balance() == 0
+
+
+def test_refundERC20(deployer, provider, weth_token, helpers):
     amount = 1e10
 
     with reverts('AUTH_ADMIN_OR_LIDO_AGENT'):
@@ -126,29 +152,26 @@ def test_refundERC20(deployer, provider, weth_token):
     assert weth_token.balanceOf(deployer) == 0
 
     agent_balance_before = weth_token.balanceOf(LIDO_AGENT)
-    provider.refundERC20(WETH_TOKEN, amount)
+    tx = provider.refundERC20(WETH_TOKEN, amount)
+    helpers.assert_single_event_named('ERC20Refunded', tx, source=provider.address,
+        evt_keys_dict = {'requestedBy': deployer, 'token': WETH_TOKEN, 'amount': amount})
+
     assert weth_token.balanceOf(LIDO_AGENT) == agent_balance_before + amount
 
 
-def test_refundETH(deployer, provider):
-    balance_before = get_balance(LIDO_AGENT)
-    amount = toE18(1)
+def test_refundERC721(deployer, provider, nft_mock, helpers):
+    nft = 1234
+    nft_mock.mintToken(nft)
+    assert nft_mock.ownerOf(nft) == deployer
+    nft_mock.transferFrom(deployer, provider, nft)
+    assert nft_mock.ownerOf(nft) == provider
 
-    with reverts('AUTH_ADMIN_OR_LIDO_AGENT'):
-        provider.refundETH({'from': accounts[2]})
+    tx = provider.refundERC721(nft_mock, nft)
+    helpers.assert_single_event_named('ERC721Refunded', tx, source=provider.address,
+        evt_keys_dict = {'requestedBy': deployer, 'token': nft_mock.address, 'tokenId': nft})
 
-    deployer.transfer(provider.address, amount)
-    provider.refundETH()
-
-    deployer.transfer(provider.address, amount)
-    provider.refundETH({'from': LIDO_AGENT})
-
-    assert balance_before + 2 * amount == get_balance(LIDO_AGENT)
-
-
-def todo_test_refundERC721(deployer, provider):
-    assert False
-
+    assert nft_mock.ownerOf(nft) == LIDO_AGENT
+    
 
 def test_diff_between_two_prices_points(provider):
     assert 0 == provider.priceDeviationPoints(toE18(1), toE18(1))
@@ -162,7 +185,7 @@ def test_diff_between_two_prices_points(provider):
     assert 298 == provider.priceDeviationPoints(toE18(1.03), toE18(1.060775))
 
 
-def test_calc_desired_and_min_token_amounts(deployer, TestUniV3LiquidityProvider):
+def test_calc_desired_and_min_token_amounts(deployer, TestUniV3LiquidityProvider, helpers):
     desired_tick = INITIAL_DESIRED_TICK
     max_tick_deviation = MAX_TICK_DEVIATION
 
@@ -172,6 +195,8 @@ def test_calc_desired_and_min_token_amounts(deployer, TestUniV3LiquidityProvider
         max_tick_deviation,
         MAX_ALLOWED_DESIRED_TICK_CHANGE,
         {'from': deployer})
+
+    helpers.assert_single_event_named('LiquidityParametersUpdated', provider.tx, source=provider.address)
     
     eth_to_use = ETH_TO_SEED - provider.ETH_AMOUNT_MARGIN()
     
@@ -189,10 +214,18 @@ def test_calc_desired_and_min_token_amounts(deployer, TestUniV3LiquidityProvider
         'u0': formatE18(upperAmount0),
         'u1': formatE18(upperAmount1),
     })
-    assert provider.desiredWsteth() == amount0
-    assert provider.desiredWeth() == amount1
-    assert provider.minWsteth() == min(upperAmount0, lowerAmount0)
-    assert provider.minWeth() == min(lowerAmount1, upperAmount1)
+    assert provider.desiredWstethAmount() == amount0
+    assert provider.desiredWethAmount() == amount1
+    assert provider.minWstethAmount() == min(upperAmount0, lowerAmount0)
+    assert provider.minWethAmount() == min(lowerAmount1, upperAmount1)
+
+
+def test_only_admin_or_dao_can_set_admin(deployer, provider):
+    with reverts('AUTH_ADMIN_OR_LIDO_AGENT'):
+        provider.setAdmin(accounts[1], {'from': accounts[1]})
+
+    with reverts('AUTH_ADMIN_OR_LIDO_AGENT'):
+        provider.setAdmin(accounts[1], {'from': POOL})
 
 
 def test_only_admin_or_dao_can_mint(deployer, provider):
@@ -222,7 +255,15 @@ def test_only_admin_or_dao_can_refund(deployer, provider):
         provider.refundETH({'from': accounts[1]})
 
 
-def test_mint_happy_path(deployer, provider, pool, steth_token, wsteth_token, weth_token, lido_agent):
+def test_set_admin(deployer, provider, helpers):
+    new_admin = accounts[1]
+    tx = provider.setAdmin(new_admin, {'from': deployer})
+    helpers.assert_single_event_named('AdminSet', tx, evt_keys_dict = {'admin': new_admin} )
+    tx = provider.setAdmin(deployer, {'from': new_admin})
+    helpers.assert_single_event_named('AdminSet', tx, evt_keys_dict = {'admin': deployer} )
+
+
+def test_mint_happy_path(deployer, provider, pool, steth_token, wsteth_token, weth_token, lido_agent, helpers):
     deployer.transfer(provider.address, ETH_TO_SEED)
 
     assert 0 == get_tick_positions_liquidity(pool, provider.POSITION_LOWER_TICK())
@@ -232,8 +273,16 @@ def test_mint_happy_path(deployer, provider, pool, steth_token, wsteth_token, we
                                    weth_token, lido_agent, need_check_agent_balance=False):
         tx = provider.mint(provider.desiredTick())
         print_mint_return_value(tx.return_value)
-        token_id, _, _, _ = tx.return_value
-    
+        token_id, liquidity, amount0, amount1 = tx.return_value
+
+        helpers.assert_single_event_named('LiquidityParametersUpdated', tx)
+        helpers.assert_single_event_named('LiquidityProvided', tx, evt_keys_dict={
+            'tokenId': token_id,
+            'liquidity': liquidity,
+            'wstethAmount': amount0,
+            'wethAmount': amount1,
+        })
+
     assert_liquidity_provided(provider, pool, token_id)
 
 
@@ -270,11 +319,11 @@ def test_mint_fails_if_large_tick_deviation(deployer, provider, swapper):
 
     assert abs(tickAfter - provider.desiredTick()) > provider.MAX_TICK_DEVIATION()
 
-    with reverts('TICK_DEVIATION_TOO_MUCH_AT_START'):
+    with reverts('TICK_DEVIATION_TOO_BIG_AT_START'):
         provider.mint(provider.desiredTick())
 
 
-def test_attempt_to_change_desired_tick_too_much(deployer, provider):
+def test_attempt_to_change_desired_tick_too_big(deployer, provider):
     with reverts('DESIRED_TICK_IS_OUT_OF_ALLOWED_RANGE'):
         provider.mint(provider.MIN_ALLOWED_DESIRED_TICK() - 1)
 

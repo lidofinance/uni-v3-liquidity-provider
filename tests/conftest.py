@@ -12,7 +12,6 @@ from config import *
 def shared_setup(fn_isolation):
     pass
 
-
 @pytest.fixture(scope='module')
 def deployer(accounts):
     return accounts[0]
@@ -50,6 +49,11 @@ def provider(deployer, TestUniV3LiquidityProvider):
 @pytest.fixture(scope='function')
 def swapper(deployer, TokensSwapper):
     return TokensSwapper.deploy({'from': deployer})
+
+# making scope 'module' causes "This contract no longer exists" errors
+@pytest.fixture(scope='function')
+def nft_mock(deployer, ERC721Mock):
+    return ERC721Mock.deploy({'from': deployer})
 
 
 class Helpers:
