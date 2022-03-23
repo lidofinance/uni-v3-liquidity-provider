@@ -183,6 +183,11 @@ contract UniV3LiquidityProvider {
         admin = _admin;
     }
 
+    /**
+     * Update desired tick and provide liquidity to the pool
+     * 
+     * @param _desiredTick TODO
+     */
     function mint(int24 _desiredTick) external authAdminOrDao() returns (
         uint256 tokenId,
         uint128 liquidity,
@@ -240,12 +245,12 @@ contract UniV3LiquidityProvider {
         _refundLeftoversToLidoAgent();
     }
 
+
     function closeLiquidityPosition() external authAdminOrDao() returns (
         uint256 amount0,
         uint256 amount1
     ) {
-        // TODO: Implement the function
-
+        // TODO: adjust amount{0,1}Min for slippage protection
         // amount0Min and amount1Min are price slippage checks
         // if the amount received after burning is not greater than these minimums, transaction will fail
         INonfungiblePositionManager.DecreaseLiquidityParams memory params =
@@ -258,14 +263,24 @@ contract UniV3LiquidityProvider {
             });
 
         (amount0, amount1) = NONFUNGIBLE_POSITION_MANAGER.decreaseLiquidity(params);
-
         require(amount0 > 0, "AMOUNT0_IS_ZERO");
         require(amount1 > 0, "AMOUNT1_IS_ZERO");
 
-        // require(IERC20(TOKEN0).balanceOf(address(this)) >= amount0, "NOT_ENOUGH_AMOUNT0");
-        // require(IERC20(TOKEN1).balanceOf(address(this)) >= amount1, "NOT_ENOUGH_AMOUNT1");
+        (uint256 amount0Collected, uint256 amount1Collected) = NONFUNGIBLE_POSITION_MANAGER.collect(
+            INonfungiblePositionManager.CollectParams({
+                tokenId: liquidityPositionTokenId,
+                recipient: address(this),
+                amount0Max: uint128(amount0),  // narrowing conversion is OK: with 1e18 precision there is
+                amount1Max: uint128(amount1)   // still enough space for any reasonable token amounts
+            })
+        );
 
-        // _refundLeftoversToLidoAgent();
+        require(amount0 == amount0Collected, "AMOUNT0_NE_COLLECTED");
+        require(amount1 == amount1Collected, "AMOUNT1_NE_COLLECTED");
+
+        _refundLeftoversToLidoAgent();
+
+        NONFUNGIBLE_POSITION_MANAGER.burn(liquidityPositionTokenId);
     }
 
     function refundETH() external authAdminOrDao() {

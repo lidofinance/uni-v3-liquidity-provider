@@ -34,13 +34,12 @@ class assert_leftovers_refunded():
 
     def __enter__(self):
         self.agent_eth_before = self.lido_agent.balance()
+        self.agent_steth_before = self.steth_token.balanceOf(self.lido_agent.address)
         self.eth_leftover = self.provider.balance()
         self.weth_leftover = self.weth_token.balanceOf(self.provider.address)
+        self.wsteth_leftover = self.wsteth_token.balanceOf(self.provider.address)
 
     def __exit__(self, *args):
-        if args != [None, None, None]:
-            return False  # to re-raise the exception
-
         assert self.provider.balance() == 0
         assert self.weth_token.balanceOf(self.provider.address) == 0
         assert self.steth_token.balanceOf(self.provider.address) <= 1
@@ -49,6 +48,11 @@ class assert_leftovers_refunded():
         if self.need_check_agent_balance:
             assert self.lido_agent.balance() - self.agent_eth_before \
                 == self.eth_leftover + self.weth_leftover
+
+            assert deviation_percent(
+                self.steth_token.balanceOf(self.lido_agent.address) - self.agent_steth_before,
+                self.wsteth_leftover * self.wsteth_token.stEthPerToken() / 1e18
+            ) < 0.001  # 0.001%
 
 
 def assert_contract_params_after_deployment(provider):
@@ -316,6 +320,7 @@ def test_mint_happy_path(deployer, provider, pool, position_manager, steth_token
     assert 0 == get_tick_positions_liquidity(pool, provider.POSITION_LOWER_TICK())
     assert 0 == get_tick_positions_liquidity(pool, provider.POSITION_UPPER_TICK())
 
+    # Don't check agent balance here because 
     with assert_leftovers_refunded(provider, steth_token, wsteth_token,
                                    weth_token, lido_agent, need_check_agent_balance=False):
         tx = provider.mint(provider.desiredTick())
@@ -404,35 +409,59 @@ def test_wrap_eth_to_tokens(deployer, provider, steth_token, wsteth_token, weth_
         provider.refundLeftoversToLidoAgent()
 
 
-def test_close_liquidity_position(deployer, provider, position_manager, wsteth_token, weth_token):
-    # TODO: implement the test
-
-    # pm = provider.NONFUNGIBLE_POSITION_MANAGER()
-
+def test_close_liquidity_position(deployer, provider, position_manager, steth_token, wsteth_token, weth_token, lido_agent):
     deployer.transfer(provider.address, ETH_TO_SEED)
     tx = provider.mint(provider.desiredTick())
-    token_id, _, _, _ = tx.return_value
-
-    assert position_manager.ownerOf(token_id) == LIDO_AGENT
+    token_id, _, wsteth_provided, weth_provided = tx.return_value
+    print(
+        f'liquidity provided:\n'
+        f'  wsteth={formatE18(wsteth_provided)}\n'
+        f'  weth={formatE18(weth_provided)}\n'
+    )
 
     assert position_manager.ownerOf(token_id) == LIDO_AGENT
 
     position_manager.transferFrom(LIDO_AGENT, provider, token_id, {'from': LIDO_AGENT})
-
     assert position_manager.ownerOf(token_id) == provider
 
-    # TODO: Check agent balance
+    agent_steth_before = steth_token.balanceOf(LIDO_AGENT)
+    agent_eth_before = lido_agent.balance()
 
-    wsteth_balance = wsteth_token.balanceOf(LIDO_AGENT)
-    weth_balance = weth_token.balanceOf(LIDO_AGENT)
+    print(
+        f'contract balances:\n'
+        f'  wsteth={formatE18(wsteth_token.balanceOf(provider.address))}\n'
+        f'  weth={formatE18(weth_token.balanceOf(provider.address))}\n'
+    )
 
     tx = provider.closeLiquidityPosition()
     wstethAmount, wethAmount = tx.return_value
-    print(f'position liquidity withdrawn:\n'
-          f'  wsteth={formatE18(wstethAmount)}\n'
-          f'  weth={formatE18(wethAmount)}\n')
 
+    print(
+        f'contract balances:\n'
+        f'  wsteth={formatE18(wsteth_token.balanceOf(provider.address))}\n'
+        f'  weth={formatE18(weth_token.balanceOf(provider.address))}\n'
+    )
 
-    # assert pm.ownerOf(token_id) == LIDO_AGENT
+    print(
+        f'position liquidity withdrawn:\n'
+        f'  wsteth={formatE18(wstethAmount)}\n'
+        f'  weth={formatE18(wethAmount)}\n'
+    )
 
-    # nft_mock.transferFrom(deployer, provider, nft)
+    assert lido_agent.balance() - agent_eth_before \
+        + steth_token.balanceOf(LIDO_AGENT) - agent_steth_before \
+        >= ETH_TO_SEED * 0.998  # some ETH is getting eaten along the way
+
+    assert provider.balance() == 0
+    assert weth_token.balanceOf(provider.address) == 0
+    assert steth_token.balanceOf(provider.address) <= 1
+    assert wsteth_token.balanceOf(provider.address) == 0
+
+    print(
+        f'contract balances:\n'
+        f'  wsteth={formatE18(wsteth_token.balanceOf(provider.address))}\n'
+        f'  weth={formatE18(weth_token.balanceOf(provider.address))}\n'
+    )
+
+    with reverts('ERC721: owner query for nonexistent token'):
+        position_manager.ownerOf(token_id)
