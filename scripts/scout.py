@@ -16,7 +16,7 @@ wsteth_token = interface.WSTETH(WSTETH_TOKEN)
 
 provider = TestUniV3LiquidityProvider.deploy(
     ETH_TO_SEED,
-    DESIRED_TICK,
+    INITIAL_DESIRED_TICK,
     MAX_TICK_DEVIATION,
     MAX_ALLOWED_DESIRED_TICK_CHANGE,
     {'from': deployer})
@@ -29,7 +29,7 @@ def print_stats():
     info['chainlink-based wsteth price'] = formatE18(provider.getChainlinkBasedWstethPrice())
     info['current price'] = formatE18(provider.getSpotPrice())
     info['current tick'] = provider.getCurrentPriceTick()
-    info['in-range liquidity'] = formatE18(pool.liquidity())
+    # info['in-range liquidity'] = formatE18(pool.liquidity())
 
     # TODO: calc total pool liquidity / info about existing positions
 
@@ -39,7 +39,7 @@ def print_stats():
 
 
 def get_amounts_for_liquidity(liquidity):
-    tx = provider.calcTokenAmounts(liquidity)
+    tx = provider.calcTokenAmountsByPool(liquidity)
     wstethAmount, wethAmount = tx.return_value
     return wstethAmount, wethAmount
 
@@ -137,5 +137,5 @@ def main():
         'wsteth_amount': formatE18(wsteth_amount),
         'weth_amount': formatE18(weth_amount),
         'wsteth/weth ratio': wsteth_amount / weth_amount,
-        'eth_used': formatE18(eth_used),
+        'eth_used (approx)': formatE18(eth_used),
     })

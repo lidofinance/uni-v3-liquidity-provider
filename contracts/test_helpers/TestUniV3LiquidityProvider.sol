@@ -5,12 +5,31 @@ import { IUniswapV3MintCallback } from "@uniswap/v3-core/contracts/interfaces/ca
 import "../UniV3LiquidityProvider.sol";
 
 
+interface ChainlinkAggregatorV3Interface {
+    function decimals() external view returns (uint8);
+
+    // getRoundData and latestRoundData should both raise "No data present"
+    // if they do not have data to report, instead of returning unset values
+    // which could be misinterpreted as actual reported values.
+    function latestRoundData() external view
+        returns (
+            uint80 roundId,
+            int256 answer,
+            uint256 startedAt,
+            uint256 updatedAt,
+            uint80 answeredInRound
+        );
+}
+
+
 contract TestUniV3LiquidityProvider is 
     IERC721Receiver,
     IUniswapV3MintCallback,
     UniV3LiquidityProvider
 {
-    int256 public chainlinkOverriddenPrice;
+    using LowGasSafeMath for uint256;
+
+    address public constant CHAINLINK_STETH_ETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
 
     constructor(
         uint256 _ethAmount,
@@ -38,10 +57,6 @@ contract TestUniV3LiquidityProvider is
 
     function calcDesiredAndMinTokenAmounts() external {
         _calcDesiredAndMinTokenAmounts();
-    }
-
-    function setChainlinkPrice(int256 _price) external {
-        chainlinkOverriddenPrice = _price;
     }
 
     function priceDeviationPoints(uint256 _priceOne, uint256 _priceTwo)
@@ -80,10 +95,6 @@ contract TestUniV3LiquidityProvider is
         return liquidity;
     }
 
-    function getPositionTokenOwner(uint256 _tokenId) external view returns (address) {
-        return NONFUNGIBLE_POSITION_MANAGER.ownerOf(_tokenId);
-    }
-
     function refundLeftoversToLidoAgent() external {
         _refundLeftoversToLidoAgent();
     }
@@ -115,13 +126,11 @@ contract TestUniV3LiquidityProvider is
         ) = NONFUNGIBLE_POSITION_MANAGER.positions(_tokenId);
     }
 
-    function calcTokenAmounts(uint128 _liquidity) external authAdminOrDao() returns (
+    // Calc amounts by using POOL's mint (not NonFungibleTokenManager and not manual calculations)
+    function calcTokenAmountsByPool(uint128 _liquidity) external authAdminOrDao() returns (
         uint256 token0Seeded,
         uint256 token1Seeded
     ) {
-        // require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_MOVEMENT_TOO_LARGE_AT_START");
-        // require(_deviationFromChainlinkPricePoints() <= MAX_DIFF_TO_CHAINLINK_POINTS, "LARGE_DIFFERENCE_TO_CHAINLINK_PRICE_AT_START");
-
         (token0Seeded, token1Seeded) = POOL.mint(
             address(this),
             POSITION_LOWER_TICK,
@@ -129,9 +138,6 @@ contract TestUniV3LiquidityProvider is
             _liquidity,
             abi.encode(msg.sender) // Data field for uniswapV3MintCallback
         );
-
-        // require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_MOVEMENT_TOO_LARGE");
-        // require(_deviationFromChainlinkPricePoints() <= MAX_DIFF_TO_CHAINLINK_POINTS, "LARGE_DIFFERENCE_TO_CHAINLINK_PRICE");
     }
 
     function uniswapV3MintCallback(
@@ -170,12 +176,41 @@ contract TestUniV3LiquidityProvider is
         return this.onERC721Received.selector;
     }
 
-    function _getChainlinkFeedLatestRoundDataPrice() internal view override returns (int256) {
-        if (0 == chainlinkOverriddenPrice) {
-            return super._getChainlinkFeedLatestRoundDataPrice();
-        } else {
-            return chainlinkOverriddenPrice;
-        }
+    function _getChainlinkFeedLatestRoundDataPrice() internal view virtual returns (int256) {
+        ( , int256 price, , uint256 timeStamp, ) = ChainlinkAggregatorV3Interface(CHAINLINK_STETH_ETH_PRICE_FEED).latestRoundData();
+        assert(timeStamp != 0);
+        return price;
     }
 
+    function _getChainlinkBasedWstethPrice() internal view returns (uint256) {
+        uint256 priceDecimals = ChainlinkAggregatorV3Interface(CHAINLINK_STETH_ETH_PRICE_FEED).decimals();
+        assert(0 < priceDecimals && priceDecimals <= 18);
+
+        int price = _getChainlinkFeedLatestRoundDataPrice();
+
+        uint256 ethPerSteth = uint256(price) * 10**(18 - priceDecimals);
+        uint256 stethPerWsteth = IWstETH(TOKEN0).stEthPerToken();
+        return (ethPerSteth * stethPerWsteth) / 1e18;
+    }
+
+    function _priceDeviationPoints(uint256 _basePrice, uint256 _price)
+        internal view returns (uint256 difference)
+    {
+        require(_basePrice > 0, "ZERO_BASE_PRICE");
+
+        uint256 absDiff = _basePrice > _price
+            ? _basePrice - _price
+            : _price - _basePrice;
+
+        return (absDiff * TOTAL_POINTS) / _basePrice;
+    }
+
+    function _deviationFromChainlinkPricePoints() internal view returns (uint256) {
+        return _priceDeviationPoints(_getChainlinkBasedWstethPrice(), _getSpotPrice());
+    }
+
+    function _getSpotPrice() internal view returns (uint256) {
+        (uint160 sqrtRatioX96, , , , , , ) = POOL.slot0();
+        return uint(sqrtRatioX96).mul(uint(sqrtRatioX96)).mul(1e18) >> (96 * 2);
+    }
 }

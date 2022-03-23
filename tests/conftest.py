@@ -33,6 +33,10 @@ def pool(interface):
     return interface.IUniswapV3Pool(POOL)
 
 @pytest.fixture(scope='module')
+def position_manager(interface):
+    return interface.INonfungiblePositionManager(NONFUNGIBLE_POSITION_MANAGER)
+
+@pytest.fixture(scope='module')
 def lido_agent():
     return Contract.from_abi("Foo", LIDO_AGENT, "")
 
