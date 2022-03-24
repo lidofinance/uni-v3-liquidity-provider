@@ -48,7 +48,7 @@ def print_mint_return_value(mint_return_value):
 def get_deploy_address_path():
     return os.path.join(
         os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)),
-        'UniV3LiquidityProvider-address.txt'
+        'deploy-address.txt'
     )
 
 def write_deploy_address(address):
