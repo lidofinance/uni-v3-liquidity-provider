@@ -17,11 +17,8 @@ def formatE18(num):
 def get_balance(address):
     return Contract.from_abi("Foo", address, "").balance()
 
-def get_diff_in_percent(base, value):
-    return (value - base) / base * 100
-
-def deviation_percent(x, y):
-    return 100 * abs((x-y) / y)
+def deviation_percent(value, base):
+    return 100 * abs((value - base) / base)
 
 def get_tick_from_price(price):
     return floor(log(sqrt(price), sqrt(1.0001)))
