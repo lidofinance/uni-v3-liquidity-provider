@@ -209,13 +209,15 @@ contract UniV3LiquidityProvider {
             'DESIRED_TICK_IS_OUT_OF_ALLOWED_RANGE');
 
         desiredTick = _desiredTick;
-        _calcDesiredAndMinTokenAmounts();
-        _emitEventWithCurrentLiquidityParameters();
-
-        require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_DEVIATION_TOO_BIG_AT_START");
         require(desiredTick > POSITION_LOWER_TICK && desiredTick < POSITION_UPPER_TICK); // just one more sanity check
 
+        _calcDesiredAndMinTokenAmounts();
+        require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_DEVIATION_TOO_BIG_AT_START");
+
+        _emitEventWithCurrentLiquidityParameters();
+
         // One more sanity check: check current tick is within position range
+        // TODO: remove ?
         (, int24 currentTick, , , , , ) = POOL.slot0();
         require(currentTick > POSITION_LOWER_TICK && currentTick < POSITION_UPPER_TICK);
 
@@ -264,6 +266,7 @@ contract UniV3LiquidityProvider {
         uint256 amount1Fees
     ) {
         // TODO: maybe adjust amount{0,1}Min for slippage protection
+        //       is sandwitch scary? is anything else is scarry?
 
         // amount0Min and amount1Min are price slippage checks
         // if the amount received after burning is not greater than these minimums, transaction will fail

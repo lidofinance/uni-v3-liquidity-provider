@@ -8,7 +8,7 @@ INITIAL_DESIRED_TICK = 627
 MAX_TICK_DEVIATION = 50
 
 # max abs value admin or dao can change initial desired tick
-MAX_ALLOWED_DESIRED_TICK_CHANGE = 45  
+MAX_ALLOWED_DESIRED_TICK_CHANGE = 45
 
 
 # #####################################
