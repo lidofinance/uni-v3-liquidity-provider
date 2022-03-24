@@ -1,3 +1,4 @@
+from contextlib import AsyncExitStack
 from pprint import pprint
 from eth_account import Account
 import pytest
@@ -345,9 +346,9 @@ def test_mint_succeeds_if_small_tick_deviation(deployer, provider, pool, positio
     # 23 Mar: swap 270 weth; tick (desired/before/after): 627/629/673 (deviation 46) FAILED Price slippage check
     weth_to_swap = toE18(270)
 
-    tickBefore = provider.getCurrentPriceTick();
+    tickBefore = provider.getCurrentPriceTick()
     swapper.swapWeth({'from': deployer, 'value': weth_to_swap})
-    tickAfter = provider.getCurrentPriceTick();
+    tickAfter = provider.getCurrentPriceTick()
 
     print(f'tick (desired/before/after): {provider.desiredTick()}/{tickBefore}/{tickAfter}')
     print(f'tick deviation: {abs(tickAfter - provider.desiredTick())}')
@@ -409,7 +410,9 @@ def test_wrap_eth_to_tokens(deployer, provider, steth_token, wsteth_token, weth_
         provider.refundLeftoversToLidoAgent()
 
 
-def test_close_liquidity_position(deployer, provider, position_manager, steth_token, wsteth_token, weth_token, lido_agent):
+# TODO: test_close_liquidity_position unhappy path? priced moved out of the position? priced moved a lot?
+
+def test_close_liquidity_position(deployer, provider, position_manager, steth_token, wsteth_token, weth_token, lido_agent, swapper, helpers):
     deployer.transfer(provider.address, ETH_TO_SEED)
     tx = provider.mint(provider.desiredTick())
     token_id, _, wsteth_provided, weth_provided = tx.return_value
@@ -427,41 +430,47 @@ def test_close_liquidity_position(deployer, provider, position_manager, steth_to
     agent_steth_before = steth_token.balanceOf(LIDO_AGENT)
     agent_eth_before = lido_agent.balance()
 
-    print(
-        f'contract balances:\n'
-        f'  wsteth={formatE18(wsteth_token.balanceOf(provider.address))}\n'
-        f'  weth={formatE18(weth_token.balanceOf(provider.address))}\n'
-    )
+    # swap a bit to have non-zero fees
+    swapper.swapWeth({'from': deployer, 'value': toE18(0.1)})
 
     tx = provider.closeLiquidityPosition()
-    wstethAmount, wethAmount = tx.return_value
+    wsteth_returned, weth_returned, wsteth_fees, weth_fees = tx.return_value
 
-    print(
-        f'contract balances:\n'
-        f'  wsteth={formatE18(wsteth_token.balanceOf(provider.address))}\n'
-        f'  weth={formatE18(weth_token.balanceOf(provider.address))}\n'
-    )
+    helpers.assert_single_event_named('LiquidityRetracted', tx, evt_keys_dict={
+        'wstethAmount': wsteth_returned,
+        'wethAmount': weth_returned,
+        'wstethFeesCollected': wsteth_fees,
+        'wethFeesCollected': weth_fees,
+    })
+
+    assert wsteth_fees == 0  # we've done no wstEth swaps thus no wsteth fees
+    assert weth_fees > 0
+
+    # print(
+    #     f'contract balances:\n'
+    #     f'  wsteth={formatE18(wsteth_token.balanceOf(provider.address))}\n'
+    #     f'  weth={formatE18(weth_token.balanceOf(provider.address))}\n'
+    # )
 
     print(
         f'position liquidity withdrawn:\n'
-        f'  wsteth={formatE18(wstethAmount)}\n'
-        f'  weth={formatE18(wethAmount)}\n'
+        f'  wsteth = {formatE18(wsteth_returned)}\n'
+        f'  weth = {formatE18(weth_returned)}\n'
+        f'  wsteth fees = {formatE18(wsteth_fees)}\n'
+        f'  weth fees = {formatE18(weth_fees)}\n'
     )
-
-    assert lido_agent.balance() - agent_eth_before \
-        + steth_token.balanceOf(LIDO_AGENT) - agent_steth_before \
-        >= ETH_TO_SEED * 0.998  # some ETH is getting eaten along the way
 
     assert provider.balance() == 0
     assert weth_token.balanceOf(provider.address) == 0
     assert steth_token.balanceOf(provider.address) <= 1
     assert wsteth_token.balanceOf(provider.address) == 0
 
-    print(
-        f'contract balances:\n'
-        f'  wsteth={formatE18(wsteth_token.balanceOf(provider.address))}\n'
-        f'  weth={formatE18(weth_token.balanceOf(provider.address))}\n'
+    eth_lost = ETH_TO_SEED - (
+        lido_agent.balance() - agent_eth_before + steth_token.balanceOf(LIDO_AGENT) - agent_steth_before
     )
+    print(f'eth_lost = {formatE18(eth_lost)} ({(100 * eth_lost / ETH_TO_SEED):.2f}%)')
+
+    assert eth_lost < ETH_TO_SEED * 0.002  # 0.2%
 
     with reverts('ERC721: owner query for nonexistent token'):
         position_manager.ownerOf(token_id)

@@ -138,6 +138,17 @@ contract UniV3LiquidityProvider {
         uint256 tokenId
     );
 
+    
+    /// Emitted when liquidity position closed and fees collected
+    /// to the Lido treasure address by `requestedBy` sender.
+    event LiquidityRetracted(
+        uint256 wstethAmount,
+        uint256 wethAmount,
+        uint256 wstethFeesCollected,
+        uint256 wethFeesCollected
+    );
+
+
     /// Emitted when new admin is set
     event AdminSet(address indexed admin);
 
@@ -248,9 +259,12 @@ contract UniV3LiquidityProvider {
 
     function closeLiquidityPosition() external authAdminOrDao() returns (
         uint256 amount0,
-        uint256 amount1
+        uint256 amount1,
+        uint256 amount0Fees,
+        uint256 amount1Fees
     ) {
-        // TODO: adjust amount{0,1}Min for slippage protection
+        // TODO: maybe adjust amount{0,1}Min for slippage protection
+
         // amount0Min and amount1Min are price slippage checks
         // if the amount received after burning is not greater than these minimums, transaction will fail
         INonfungiblePositionManager.DecreaseLiquidityParams memory params =
@@ -270,13 +284,15 @@ contract UniV3LiquidityProvider {
             INonfungiblePositionManager.CollectParams({
                 tokenId: liquidityPositionTokenId,
                 recipient: address(this),
-                amount0Max: uint128(amount0),  // narrowing conversion is OK: with 1e18 precision there is
-                amount1Max: uint128(amount1)   // still enough space for any reasonable token amounts
+                amount0Max: type(uint128).max,  // narrowing conversion is OK: with 1e18 precision there is
+                amount1Max: type(uint128).max   // still enough space for any reasonable token amounts
             })
         );
 
-        require(amount0 == amount0Collected, "AMOUNT0_NE_COLLECTED");
-        require(amount1 == amount1Collected, "AMOUNT1_NE_COLLECTED");
+        amount0Fees = amount0Collected - amount0;
+        amount1Fees = amount1Collected - amount1;
+
+        emit LiquidityRetracted(amount0, amount1, amount0Fees, amount1Fees);
 
         _refundLeftoversToLidoAgent();
 
