@@ -144,11 +144,6 @@ def test_calc_token_amounts(provider):
     assert deviation_percent(weth, 512368283088628809728) < max_deviation_percent
 
 
-def test_getAmountOfEthForWsteth(provider):
-    r = provider.getAmountOfEthForWsteth(1e18) / 1e18
-    assert 1.06 < r < 1.07  # just sanity check
-
-
 def test_eth_received(deployer, provider, helpers):
     amount = toE18(1)
     tx = deployer.transfer(provider.address, amount)
@@ -321,7 +316,6 @@ def test_mint_happy_path(deployer, provider, pool, position_manager, steth_token
     assert 0 == get_tick_positions_liquidity(pool, provider.POSITION_LOWER_TICK())
     assert 0 == get_tick_positions_liquidity(pool, provider.POSITION_UPPER_TICK())
 
-    # Don't check agent balance here because 
     with assert_leftovers_refunded(provider, steth_token, wsteth_token,
                                    weth_token, lido_agent, need_check_agent_balance=False):
         tx = provider.mint(provider.desiredTick())
@@ -344,7 +338,7 @@ def test_mint_succeeds_if_small_tick_deviation(deployer, provider, pool, positio
 
     # 23 Mar: swap 260 weth; tick (desired/before/after): 627/629/668 (deviation 41) PASSED
     # 23 Mar: swap 270 weth; tick (desired/before/after): 627/629/673 (deviation 46) FAILED Price slippage check
-    weth_to_swap = toE18(270)
+    weth_to_swap = toE18(260)
 
     tickBefore = provider.getCurrentPriceTick()
     swapper.swapWeth({'from': deployer, 'value': weth_to_swap})
@@ -389,25 +383,71 @@ def test_attempt_to_change_desired_tick_too_much(provider):
         provider.mint(provider.MAX_ALLOWED_DESIRED_TICK() + 1)
 
 
-def test_wrap_eth_to_tokens(deployer, provider, wsteth_token, weth_token):
+def test_wrap_eth_to_arbitrary_token_amounts(deployer, provider, wsteth_token, weth_token):
     weth_amount = toE18(20.1234)
     wsteth_amount = toE18(30.98)
-    aux_wsteth_wei = 1000
-
     deployer.transfer(provider.address, toE18(200))
+
+    assert 0 == wsteth_token.balanceOf(provider.address)
     provider.wrapEthToTokens(wsteth_amount, weth_amount)
-
     assert weth_token.balanceOf(provider.address) == weth_amount
-    assert wsteth_amount <= wsteth_token.balanceOf(provider.address) <= wsteth_amount + aux_wsteth_wei
+    assert wsteth_amount == wsteth_token.balanceOf(provider.address)
 
 
-def test_wrap_eth_to_tokens(deployer, provider, steth_token, wsteth_token, weth_token, lido_agent):
-    deployer.transfer(provider.address, toE18(20))
-    provider.wrapEthToTokens(toE18(2), toE18(3))
+def test_wrap_wsteth(deployer, wsteth_token):
+    eth_amount = toE18(100)
 
-    with assert_leftovers_refunded(provider, steth_token, wsteth_token, weth_token,
-                                   lido_agent, need_check_agent_balance=True):
-        provider.refundLeftoversToLidoAgent()
+    deployer.transfer(wsteth_token.address, eth_amount)
+
+    wsteth = wsteth_token.balanceOf(deployer)
+    assert (wsteth * wsteth_token.stEthPerToken()) / 1e18 == eth_amount
+
+
+def test_get_amount_of_eth_for_wsteth(deployer, provider, wsteth_token):
+    wsteth = 100 * 1e18
+    eth_from_contract = provider.getAmountOfEthForWsteth(wsteth)
+    eth = (wsteth_token.stEthPerToken() * wsteth) // 1e18
+    assert 0 == eth_from_contract - eth
+    deployer.transfer(wsteth_token.address, eth)
+
+    assert wsteth == wsteth_token.balanceOf(deployer)
+
+
+def test_calc_desired_token_amounts(provider, wsteth_token):
+    eth_amount = toE18(600)
+    wsteth, weth = provider.calcDesiredTokenAmounts(591, eth_amount)
+    assert eth_amount == wsteth * wsteth_token.stEthPerToken() / 1e18 + weth
+
+
+def test_calc_amount_of_eth_for_wsteth_by_wsteth_token(deployer, wsteth_token):
+    wsteth = 100 * 1e18
+    eth = wsteth_token.getStETHByWstETH(wsteth)
+    deployer.transfer(wsteth_token.address, eth)
+    assert wsteth == wsteth_token.balanceOf(deployer) + 1  # 1 wei isn't converted to
+
+
+def test_get_amount_of_eth_for_wsteth(deployer, provider, wsteth_token):
+    wsteth = 100 * 1e18
+    eth = provider.getAmountOfEthForWsteth(wsteth)
+    deployer.transfer(wsteth_token.address, eth)
+    assert wsteth == wsteth_token.balanceOf(deployer)  # the 1 wei is taken into account inside of getAmountOfEthForWsteth 
+
+
+def test_calculated_desired_token_amounts(provider):
+    desired_wsteth = provider.desiredWstethAmount()
+    eth_for_desired_wsteth = provider.getAmountOfEthForWsteth(desired_wsteth)
+    assert provider.ethAmount() - provider.ETH_AMOUNT_MARGIN() \
+           <= eth_for_desired_wsteth + provider.desiredWethAmount() \
+           <= provider.ethAmount()
+
+
+def test_wrap_eth_to_desired_amounts_of_tokens(deployer, provider, wsteth_token, weth_token):
+    deployer.transfer(provider.address, ETH_TO_SEED)
+
+    provider.wrapEthToTokens(provider.desiredWstethAmount(), provider.desiredWethAmount())
+
+    assert wsteth_token.balanceOf(provider.address) == provider.desiredWstethAmount()
+    assert weth_token.balanceOf(provider.address) == provider.desiredWethAmount()
 
 
 # TODO: test_close_liquidity_position unhappy path? priced moved out of the position? priced moved a lot?
@@ -431,9 +471,8 @@ def test_close_liquidity_position(deployer, provider, position_manager, steth_to
     position_manager.transferFrom(LIDO_AGENT, provider, token_id, {'from': LIDO_AGENT})
     assert position_manager.ownerOf(token_id) == provider
 
-
     # swap a bit to have non-zero fees
-    # TODO: Why swapping 
+    # TODO: Why swapping increases eth_lost?
     # swapper.swapWeth({'from': deployer, 'value': toE18(0.1)})
 
     tx = provider.closeLiquidityPosition()
@@ -473,7 +512,7 @@ def test_close_liquidity_position(deployer, provider, position_manager, steth_to
     )
     print(f'eth_lost = {formatE18(eth_lost)} ({(100 * eth_lost / ETH_TO_SEED):.2f}%)')
 
-    assert eth_lost < ETH_TO_SEED * 0.002  # 0.2%
+    assert eth_lost < 10  # 10 wei
 
     with reverts('ERC721: owner query for nonexistent token'):
         position_manager.ownerOf(token_id)
