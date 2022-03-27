@@ -333,19 +333,98 @@ def test_mint_happy_path(deployer, provider, pool, position_manager, steth_token
     assert_liquidity_provided(provider, pool, position_manager, token_id)
 
 
-def test_mint_succeeds_if_small_tick_deviation(deployer, provider, pool, position_manager, swapper):
+def test_mint_succeeds_if_small_positive_tick_deviation(deployer, provider, pool, position_manager, swapper):
     deployer.transfer(provider.address, ETH_TO_SEED)
 
     # 23 Mar: swap 260 weth; tick (desired/before/after): 627/629/668 (deviation 41) PASSED
     # 23 Mar: swap 270 weth; tick (desired/before/after): 627/629/673 (deviation 46) FAILED Price slippage check
-    weth_to_swap = toE18(260)
+    weth_to_swap = toE18(270)
 
     tickBefore = provider.getCurrentPriceTick()
     swapper.swapWeth({'from': deployer, 'value': weth_to_swap})
     tickAfter = provider.getCurrentPriceTick()
 
     print(f'tick (desired/before/after): {provider.desiredTick()}/{tickBefore}/{tickAfter}')
-    print(f'tick deviation: {abs(tickAfter - provider.desiredTick())}')
+    print(f'tick deviation from desired: {abs(tickAfter - provider.desiredTick())}')
+    print(f'tick deviation from pool current: {abs(tickAfter - tickBefore)}')
+
+    assert abs(tickAfter - provider.desiredTick()) <= provider.MAX_TICK_DEVIATION()
+
+    tx = provider.mint(provider.desiredTick())
+    token_id, _, _, _ = tx.return_value
+    print_mint_return_value(tx.return_value)
+
+    assert_liquidity_provided(provider, pool, position_manager, token_id)
+
+
+def test_amounts_pool_calculations_on_edges(deployer, provider, swapper):
+    """Not a test but an illustration of deviation of amounts calculated by
+       us and by pool.
+    Do:
+    - take current tick of the pool
+    - calc token amounts by our contract
+    - calc liquidity amount for these amounts of tokens
+    - calc amounts of tokens by pool, given the liquidity
+    - compare calculated token amounts
+    - 
+    - shift pool current tick
+    - repeat the checks
+    """
+    deployer.transfer(provider.address, toE18(100000))
+    eth = ETH_TO_SEED
+
+    tick = provider.getCurrentPriceTick()
+    our_amount0, our_amount1 = provider.calcDesiredTokenAmounts(tick, eth)
+
+    liquidity = provider.getLiquidityForAmounts(our_amount0, our_amount1)
+
+    tx = provider.calcTokenAmountsByPool(liquidity)
+    pool_amount0, pool_amount1 = tx.return_value
+
+    print(
+        f'Token amounts for tick {tick}\n'
+        f'     our: {formatE18(our_amount0)}, {formatE18(our_amount1)}\n'
+        f'    pool: {formatE18(pool_amount0)}, {formatE18(pool_amount1)}\n'
+
+    )
+
+
+    swapper.swapWeth({'from': deployer, 'value': toE18(300)})
+
+    tick = provider.getCurrentPriceTick()
+    our_amount0, our_amount1 = provider.calcDesiredTokenAmounts(tick, eth)
+
+    liquidity = provider.getLiquidityForAmounts(our_amount0, our_amount1)
+
+    tx = provider.calcTokenAmountsByPool(liquidity)
+    pool_amount0, pool_amount1 = tx.return_value
+
+    print(
+        f'Token amounts after swapping (for tick {tick})\n'
+        f'     our: {formatE18(our_amount0)}, {formatE18(our_amount1)}\n'
+        f'    pool: {formatE18(pool_amount0)}, {formatE18(pool_amount1)}\n'
+
+    )
+
+
+def test_mint_succeeds_if_small_negative_tick_deviation(deployer, provider, pool, position_manager, swapper):
+    deployer.transfer(provider.address, ETH_TO_SEED)
+
+    eth_to_swap = toE18(170)
+
+    # Mar 27: swap 250 eth for wsteth; (desired/before/after): 627/632/603 (deviation from pool 29) FAILED Price slippage check
+    # Mar 27: swap 200 eth for wsteth; (desired/before/after): 627/632/615 (deviation from pool 17) FAILED Price slippage check
+    # Mar 27: swap 170 eth for wsteth; (desired/before/after): 627/632/620 (deviation from pool 12) PASSED
+
+    tickBefore = provider.getCurrentPriceTick()
+    swapper.swapWsteth({'from': deployer, 'value': eth_to_swap})
+    tickAfter = provider.getCurrentPriceTick()
+
+    print(f'tick (desired/before/after): {provider.desiredTick()}/{tickBefore}/{tickAfter}')
+    print(f'tick deviation from desired: {abs(tickAfter - provider.desiredTick())}')
+    print(f'tick deviation from pool current: {abs(tickAfter - tickBefore)}')
+
+    print(f'Calculated min wsteth / weth amounts: {formatE18(provider.minWstethAmount())} / {formatE18(provider.minWethAmount())}')
 
     assert abs(tickAfter - provider.desiredTick()) <= provider.MAX_TICK_DEVIATION()
 
@@ -417,6 +496,39 @@ def test_calc_desired_token_amounts(provider, wsteth_token):
     eth_amount = toE18(600)
     wsteth, weth = provider.calcDesiredTokenAmounts(591, eth_amount)
     assert eth_amount == wsteth * wsteth_token.stEthPerToken() / 1e18 + weth
+
+
+def test_tickMath_sqrtPriceRatioAtTick(deployer, provider, swapper):
+    tick = provider.getCurrentPriceTick()
+    print(f'pool tick: {tick}')
+
+    assert deviation_percent(provider.getCurrentSqrtPriceX96(), provider.getSqrtRatioAtTick(tick)) < 0.004
+
+    swapper.swapWeth({'from': deployer, 'value': toE18(270)})
+
+    tick = provider.getCurrentPriceTick()
+    print(f'pool tick after shift: {tick}')
+    assert deviation_percent(provider.getCurrentSqrtPriceX96(), provider.getSqrtRatioAtTick(tick)) < 0.003
+
+
+# def test_compare_with_calc_token_amounts_by_pool(deployer, provider):
+#     deployer.transfer(provider.address, toE18(100))
+#     liquidity = toE18(30)
+#     tick = provider.getCurrentPriceTick()
+
+#     # calc using pool
+#     tx = provider.calcTokenAmountsByPool(liquidity)
+#     pool_amount0, pool_amount1 = tx.return_value
+
+#     # calc using formulas in our contract
+#     amount0, amount1 = provider.calcDesiredTokenAmounts(tick, toE18(10))
+
+#     pool_ratio = pool_amount0 / pool_amount1
+#     our_ratio = amount0 / amount1
+
+#     assert abs(toE18(our_ratio) - provider.calcDesiredTokensRatio(tick)) < 20
+
+#     assert pool_ratio == our_ratio
 
 
 def test_calc_amount_of_eth_for_wsteth_by_wsteth_token(deployer, wsteth_token):

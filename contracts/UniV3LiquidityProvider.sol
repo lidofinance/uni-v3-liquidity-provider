@@ -52,7 +52,8 @@ contract UniV3LiquidityProvider {
     bytes32 public immutable POSITION_ID;
 
     // Amount of ETH we don't use for calculations of token amounts
-    // uint256 public constant ETH_AMOUNT_MARGIN = 1e6;
+    // Need this because token amounts calculations a bit incorrect and 
+    // produce amounts of tokens conversion to which requires a bit more of wei
     uint256 public constant ETH_AMOUNT_MARGIN = 500;
 
     /// Note this value is a subject of logarithm based calculations, it is not just
@@ -297,6 +298,7 @@ contract UniV3LiquidityProvider {
         _refundLeftoversToLidoAgent();
 
         NONFUNGIBLE_POSITION_MANAGER.burn(liquidityPositionTokenId);
+        liquidityPositionTokenId = 0;
     }
 
     function refundETH() external authAdminOrDao() {
@@ -344,16 +346,17 @@ contract UniV3LiquidityProvider {
      * @return wstEthOverWEthRatio (desiredWstethAmount / desiredWethAmount)
      */
     function _calcDesiredTokensRatio(int24 _tick) internal view returns (uint256 wstEthOverWEthRatio) {
-        int128 liquidity = 20e18;
+        int128 liquidity = 20e18;  // just an arbitrary amount, because we care only of ratio here
+        uint160 sqrtPriceX96 = TickMath.getSqrtRatioAtTick(_tick);
 
         int256 amount0 = SqrtPriceMath.getAmount0Delta(
-            TickMath.getSqrtRatioAtTick(_tick),
+            sqrtPriceX96,
             TickMath.getSqrtRatioAtTick(POSITION_UPPER_TICK),
             liquidity
         );
         int256 amount1 = SqrtPriceMath.getAmount1Delta(
             TickMath.getSqrtRatioAtTick(POSITION_LOWER_TICK),
-            TickMath.getSqrtRatioAtTick(_tick),
+            sqrtPriceX96,
             liquidity
         );
         require(amount0 > 0);
@@ -369,10 +372,11 @@ contract UniV3LiquidityProvider {
         // weth_amount = eth_to_use / (1 + wsteth_to_weth_ratio * wsteth_token.stEthPerToken() / 1e18)
         // wsteth_amount = weth_amount * wsteth_to_weth_ratio
 
-        uint256 wstethPrice = IWstETH(TOKEN0).getStETHByWstETH(1e18);
+        uint256 dummyAmount = 300e18;
+        uint256 wstethPrice = IWstETH(TOKEN0).getStETHByWstETH(dummyAmount);
 
         uint256 wstEthOverWEthRatio = _calcDesiredTokensRatio(_tick);
-        uint256 denom = 1e18 + (wstEthOverWEthRatio * wstethPrice) / 1e18;
+        uint256 denom = 1e18 + (wstEthOverWEthRatio * wstethPrice) / dummyAmount;
         amount1 = (_ethAmount * 1e18) / denom;
         amount0 = (amount1 * wstEthOverWEthRatio) / 1e18;
     }
@@ -387,6 +391,8 @@ contract UniV3LiquidityProvider {
         (uint256 minWstethUpper, uint256 minWethUpper) =
             _calcDesiredTokenAmounts(desiredTick + int24(MAX_TICK_DEVIATION), ethAmountToUse);
 
+        // require(minWstethUpper < minWstethLower);  passes
+        // require(minWethLower < minWethUpper);  passes
         minWstethAmount = minWstethUpper;
         minWethAmount = minWethLower;
     }

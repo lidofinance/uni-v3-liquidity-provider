@@ -4,6 +4,8 @@ pragma solidity ^0.7.0;
 import { IUniswapV3MintCallback } from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3MintCallback.sol";
 import "../UniV3LiquidityProvider.sol";
 
+import "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
+
 
 interface ChainlinkAggregatorV3Interface {
     function decimals() external view returns (uint8);
@@ -86,6 +88,11 @@ contract TestUniV3LiquidityProvider is
         return currentTick;
     }
 
+    function getCurrentSqrtPriceX96() external view returns (uint160) {
+        (uint160 sqrtPriceX96, , , , , , ) = POOL.slot0();
+        return sqrtPriceX96;
+    }
+
     function getSpotPrice() external view returns (uint256) {
         return _getSpotPrice();
     }
@@ -138,6 +145,27 @@ contract TestUniV3LiquidityProvider is
             _liquidity,
             abi.encode(msg.sender) // Data field for uniswapV3MintCallback
         );
+    }
+
+    // A wrapper around library function
+    function getSqrtRatioAtTick(int24 _tick) external view returns (uint160) {
+        return TickMath.getSqrtRatioAtTick(_tick);
+    }
+
+    // A wrapper around library function for current pool state
+    function getLiquidityForAmounts(uint256 amount0, uint256 amount1) external view returns (uint128 liquidity)
+    {
+        (uint160 sqrtPriceX96, , , , , , ) = POOL.slot0();
+        uint160 sqrtRatioAX96 = TickMath.getSqrtRatioAtTick(POSITION_LOWER_TICK);
+        uint160 sqrtRatioBX96 = TickMath.getSqrtRatioAtTick(POSITION_UPPER_TICK);
+
+        liquidity = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            sqrtRatioAX96,
+            sqrtRatioBX96,
+            amount0,
+            amount1
+        ); 
     }
 
     function uniswapV3MintCallback(

@@ -14,7 +14,7 @@ MAX_ALLOWED_DESIRED_TICK_CHANGE = 45
 # #####################################
 # Parameters used for liquidity minting
 # #####################################
-MINT_DESIRED_TICK = 627
+MINT_DESIRED_TICK = 632
 
 
 # #####################################

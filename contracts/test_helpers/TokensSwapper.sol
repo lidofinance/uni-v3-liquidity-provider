@@ -17,6 +17,8 @@ interface IWstETH {
     function unwrap(uint256 _stETHAmount) external returns (uint256);
     function stEthPerToken() external view returns (uint256);
     function transfer(address recipient, uint256 amount) external returns (bool);
+    function getStETHByWstETH(uint256 _wstETHAmount) external view returns (uint256);
+    function getWstETHByStETH(uint256 _ethAmount) external view returns (uint256);
 }
 
 
@@ -62,25 +64,28 @@ contract TokensSwapper is IUniswapV3SwapCallback {
     }
 
     function swapWsteth() external payable {
-        uint256 amount = msg.value;
+        uint256 ethAmount = msg.value;
         bool zeroForOne = true;
 
         // Set no limit to allow an arbitrary slippage
         uint160 sqrtPriceLimitX96 = zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1;
 
-        require(address(this).balance >= amount);
+        uint256 wstethAmount = WSTETH_TOKEN.getWstETHByStETH(ethAmount);
+        // require(address(this).balance >= ethAmount, "NOT_ENOUGH_ETH_FOR_WSTETH");
 
-        (bool success, ) = address(WSTETH_TOKEN).call{value: amount}("");
+        (bool success, ) = address(WSTETH_TOKEN).call{value: ethAmount}("");
         require(success, "WSTETH_MINTING_FAILED");
 
         (int256 amount0Delta, int256 amount1Delta) = POOL.swap(
             address(this), // msg.sender,
             zeroForOne,
-            int256((amount * 1e18) / WSTETH_TOKEN.stEthPerToken()) - 100,
+            int256(wstethAmount),
+            // int256((amount * 1e18) / WSTETH_TOKEN.stEthPerToken()) - 100,
             sqrtPriceLimitX96,
             abi.encode(msg.sender)
         );
     }
+
     function uniswapV3SwapCallback(
         int256 amount0Delta,
         int256 amount1Delta,
