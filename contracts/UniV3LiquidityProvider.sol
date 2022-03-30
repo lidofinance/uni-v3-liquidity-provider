@@ -30,6 +30,10 @@ interface IWstETH {
     function getStETHByWstETH(uint256 _wstETHAmount) external view returns (uint256);
 }
 
+// NB: Considerations about math precision
+// To reduce the impact of rounding errors we use "Ray Math" taken from AAVE protocol
+// A Ray is a unit with 27 decimals of precision.
+// Variables storing values with 27 digits of precision are named with suffix "E27"
 
 contract UniV3LiquidityProvider {
     using LowGasSafeMath for uint256;
@@ -55,8 +59,8 @@ contract UniV3LiquidityProvider {
     // Amount of ETH we don't use for calculations of token amounts
     // Need this because token amounts calculations a bit incorrect and 
     // produce amounts of tokens conversion to which requires a bit more of wei
-    // uint256 public constant ETH_AMOUNT_MARGIN = 500;
-    uint256 public constant ETH_AMOUNT_MARGIN = 0;
+    uint256 public constant ETH_AMOUNT_MARGIN = 500;
+    // uint256 public constant ETH_AMOUNT_MARGIN = 0;
 
     /// Note this value is a subject of logarithm based calculations, it is not just
     /// that "1" corresponds to 0.01% as it might seem. But might be very close at current price
@@ -211,9 +215,9 @@ contract UniV3LiquidityProvider {
 
         desiredTick = _desiredTick;
         require(desiredTick > POSITION_LOWER_TICK && desiredTick < POSITION_UPPER_TICK); // just one more sanity check
+        require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_DEVIATION_TOO_BIG_AT_START");
 
         _calcDesiredAndMinTokenAmounts();
-        require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_DEVIATION_TOO_BIG_AT_START");
 
         _emitEventWithCurrentLiquidityParameters();
 
@@ -235,10 +239,10 @@ contract UniV3LiquidityProvider {
                 tickUpper: POSITION_UPPER_TICK,
                 amount0Desired: desiredWstethAmount,
                 amount1Desired: desiredWethAmount,
-                // amount0Min: minWstethAmount,
-                // amount1Min: minWethAmount,
-                amount0Min: 0,
-                amount1Min: 0,
+                amount0Min: minWstethAmount,
+                amount1Min: minWethAmount,
+                // amount0Min: 0,
+                // amount1Min: 0,
                 recipient: LIDO_AGENT,
                 deadline: block.timestamp
             });
@@ -349,42 +353,43 @@ contract UniV3LiquidityProvider {
      * @param _tick Price tick
      * @return wstEthOverWEthRatio (desiredWstethAmount / desiredWethAmount)
      */
-    function _calcDesiredTokensRatio(int24 _tick) internal view returns (uint256 wstEthOverWEthRatio) {
+    function _calcTokensRatio(int24 _tick) internal view returns (uint256 wstEthOverWEthRatio) {
         uint160 sqrtPriceX96 = TickMath.getSqrtRatioAtTick(_tick);
-        return _calcDesiredTokensRatioFromSqrtPrice(sqrtPriceX96);
+        return _calcTokensRatioFromSqrtPrice(sqrtPriceX96);
     }
 
-    function _calcDesiredTokensRatioFromSqrtPrice(uint160 _sqrtPriceX96) internal view
-        returns (uint256 wstEthOverWEthRatio)
+    function _calcTokensRatioFromSqrtPrice(uint160 _sqrtPriceX96) internal view
+        returns (uint256 wstEthOverWEthRatioE27)
     {
-        int128 liquidity = 20e18;  // just an arbitrary amount, because we care only of ratio here
+        // We care only of ratio of tokens here, so the exact amount of liquidity isn't important
+        // But the amount must be large enough to provide sufficient precision
+        int128 liquidity = 1e27;  
 
-        int256 amount0 = SqrtPriceMath.getAmount0Delta(
+        int256 amount0E27 = SqrtPriceMath.getAmount0Delta(
             _sqrtPriceX96,
             TickMath.getSqrtRatioAtTick(POSITION_UPPER_TICK),
             liquidity
         );
-        int256 amount1 = SqrtPriceMath.getAmount1Delta(
+        int256 amount1E27 = SqrtPriceMath.getAmount1Delta(
             TickMath.getSqrtRatioAtTick(POSITION_LOWER_TICK),
             _sqrtPriceX96,
             liquidity
         );
-        require(amount0 > 0);
-        require(amount1 > 0);
+        require(amount0E27 > 0);
+        require(amount1E27 > 0);
 
-        int256 precision = 1e27;
-        wstEthOverWEthRatio = uint256((amount0 * precision) / amount1);
+        wstEthOverWEthRatioE27 = uint256((amount0E27 * 1e27) / amount1E27);
     }
 
     /**
      * Calc token amounts from wsteth/weth ratio
      *
-     * @param _ratio wsteth/weth target ratio with e27 precision
+     * @param _ratioE27 wsteth/weth target ratio with e27 precision
      * @param _ethAmount eth amount to use
      * @return amount0 Amounts of wsteth
      * @return amount1 Amount of weth
      */
-    function _calcDesiredTokenAmountsFromRatio(uint256 _ratio, uint256 _ethAmount) internal view
+    function _calcTokenAmountsFromRatio(uint256 _ratioE27, uint256 _ethAmount) internal view
         returns (uint256 amount0, uint256 amount1)
     {
         // The system from which the formulas derived:
@@ -395,71 +400,46 @@ contract UniV3LiquidityProvider {
         //   weth = eth / (ratio * stEthPerToken + 1)
         //   wsteth = ratio * weth
 
-        uint256 dummyAmount = 1e27;
-        uint256 wstethPriceForDummyAmount = IWstETH(TOKEN0).getStETHByWstETH(dummyAmount);
-        // uint256 wstethPriceForDummyAmount = _getAmountOfEthForWsteth(dummyAmount);
-        // uint256 wstethPriceForDummyAmount = IWstETH(TOKEN0).stEthPerToken();
 
-        uint256 denominator = 1e27 + (_ratio * wstethPriceForDummyAmount) / dummyAmount;
-        amount1 = (_ethAmount * 1e27 * 1e9) / denominator;
+        // uint256 wstethPriceE27 = _getAmountOfEthForWsteth(oneE27);
+        // uint256 wstethPriceE27 = IWstETH(TOKEN0).stEthPerToken();
 
-        uint256 ratioPrecision = 1e27;
-        uint256 amount1AdditionalPrecision = 1e9;
-        uint256 precision = ratioPrecision * amount1AdditionalPrecision;
-        amount0 = (amount1 * _ratio) / precision;
-        amount1 = amount1 / amount1AdditionalPrecision;
+        uint256 oneE27 = 1e27;
+        uint256 wstethPriceE27 = IWstETH(TOKEN0).getStETHByWstETH(oneE27);
+
+        uint256 denominatorE27 = oneE27 + (_ratioE27 * wstethPriceE27) / oneE27;
+
+        uint256 amount1E27 = (_ethAmount * 1e9 * oneE27) / denominatorE27;
+
+        amount0 = (amount1E27 * _ratioE27) / (oneE27 * 1e9);
+
+        amount1 = amount1E27 / 1e9;
     }
 
-    function _calcDesiredTokensAmountsFromCurrentPoolSqrtPrice(uint256 _ethAmount) internal view
+    function _calcTokensAmountsFromCurrentPoolSqrtPrice(uint256 _ethAmount) internal view
         returns (uint256 amount0, uint256 amount1)
     {
         (uint160 sqrtRatioX96, , , , , , ) = POOL.slot0(); 
-        uint256 ratio = _calcDesiredTokensRatioFromSqrtPrice(sqrtRatioX96);
-        return _calcDesiredTokenAmountsFromRatio(ratio, _ethAmount);
+        uint256 ratio = _calcTokensRatioFromSqrtPrice(sqrtRatioX96);
+        return _calcTokenAmountsFromRatio(ratio, _ethAmount);
     }
 
-    function _calcDesiredTokenAmounts(int24 _tick, uint256 _ethAmount) internal view
+    function _calcTokenAmounts(int24 _tick, uint256 _ethAmount) internal view
         returns (uint256 amount0, uint256 amount1)
     {
-        // The formulas used:
-        // weth_amount = eth_to_use / (1 + wsteth_to_weth_ratio * wsteth_token.stEthPerToken() / 1e18)
-        // wsteth_amount = weth_amount * wsteth_to_weth_ratio
-
-        // uint256 dummyAmount = 300e18;
-        // uint256 dummyAmount = ethAmount - ETH_AMOUNT_MARGIN;
-
-        // uint256 dummyAmount = 1e18;
-        // uint256 wstethPriceForDummyAmount = IWstETH(TOKEN0).stEthPerToken();
-
-        // uint256 dummyAmount = 1e18;
-        // uint256 wstethPriceForDummyAmount = IWstETH(TOKEN0).getStETHByWstETH(dummyAmount);
-
-        uint256 dummyAmount = _ethAmount;
-        // uint256 dummyAmount = 1e18;
-        uint256 wstethPriceForDummyAmount = _getAmountOfEthForWsteth(dummyAmount);
-
-        uint256 wstEthOverWEthRatio = _calcDesiredTokensRatio(_tick);
-
-        // old way (2 lines)
-        uint256 denom = 1e18 + (wstEthOverWEthRatio * wstethPriceForDummyAmount) / dummyAmount;
-        amount1 = (_ethAmount * 1e18) / denom;
-
-        // amount1 = (1e36 * _ethAmount) / ((wstEthOverWEthRatio * wstethPriceForDummyAmount) / dummyAmount + 1e36);
-
-        amount0 = (amount1 * wstEthOverWEthRatio) / 1e18;
+        uint256 ratio = _calcTokensRatio(_tick);
+        return _calcTokenAmountsFromRatio(ratio, _ethAmount);
     }
-
-
 
     function _calcDesiredAndMinTokenAmounts() internal {
         uint256 ethAmountToUse = ethAmount - ETH_AMOUNT_MARGIN;
 
-        (desiredWstethAmount, desiredWethAmount) = _calcDesiredTokenAmounts(desiredTick, ethAmountToUse);
+        (desiredWstethAmount, desiredWethAmount) = _calcTokenAmounts(desiredTick, ethAmountToUse);
 
         (uint256 minWstethLower, uint256 minWethLower) =
-            _calcDesiredTokenAmounts(desiredTick - int24(MAX_TICK_DEVIATION), ethAmountToUse);
+            _calcTokenAmounts(desiredTick - int24(MAX_TICK_DEVIATION) + 1, ethAmountToUse);
         (uint256 minWstethUpper, uint256 minWethUpper) =
-            _calcDesiredTokenAmounts(desiredTick + int24(MAX_TICK_DEVIATION), ethAmountToUse);
+            _calcTokenAmounts(desiredTick + int24(MAX_TICK_DEVIATION) - 1, ethAmountToUse);
 
         // require(minWstethUpper < minWstethLower);  passes
         // require(minWethLower < minWethUpper);  passes

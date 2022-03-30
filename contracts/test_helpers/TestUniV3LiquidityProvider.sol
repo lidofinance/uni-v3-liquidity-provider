@@ -48,35 +48,35 @@ contract TestUniV3LiquidityProvider is
     }
 
     /// returns wstEthOverWEthRatio
-    function calcDesiredTokensRatio(int24 _tick) external view returns (uint256) {
-        return _calcDesiredTokensRatio(_tick);
+    function calcTokensRatio(int24 _tick) external view returns (uint256) {
+        return _calcTokensRatio(_tick);
     }
 
-    function calcDesiredTokensRatioFromSqrtPrice(uint160 _sqrtPriceX86) external view returns (uint256 wstEthOverWEthRatio) {
-        return _calcDesiredTokensRatioFromSqrtPrice(_sqrtPriceX86);
+    function calcTokensRatioFromSqrtPrice(uint160 _sqrtPriceX86) external view returns (uint256 wstEthOverWEthRatio) {
+        return _calcTokensRatioFromSqrtPrice(_sqrtPriceX86);
     }
 
-    function calcDesiredTokenAmounts(int24 _tick, uint256 _ethAmount) external view
+    function calcTokenAmounts(int24 _tick, uint256 _ethAmount) external view
         returns (uint256 amount0, uint256 amount1)
     {
-        (amount0, amount1) = _calcDesiredTokenAmounts(_tick, _ethAmount);
+        (amount0, amount1) = _calcTokenAmounts(_tick, _ethAmount);
     }
 
-    // function calcDesiredTokensRatioFromSqrtPrice(uint160 _sqrtPriceX96) external view
+    // function calcTokensRatioFromSqrtPrice(uint160 _sqrtPriceX96) external view
     // {
-    //     return _calcDesiredTokensRatioFromSqrtPrice(_sqrtPriceX96);
+    //     return _calcTokensRatioFromSqrtPrice(_sqrtPriceX96);
     // }
 
-    // function calcDesiredTokenAmountsFromRatio(uint256 _ratio, uint256 _ethAmount) external view
+    // function calcTokenAmountsFromRatio(uint256 _ratio, uint256 _ethAmount) external view
     //     returns (uint256 amount0, uint256 amount1)
     // {
-    //     return _calcDesiredTokenAmountsFromRatio(_ratio, _ethAmount);
+    //     return _calcTokenAmountsFromRatio(_ratio, _ethAmount);
     // }
 
     function calcDesiredTokensAmountsFromCurrentPoolSqrtPrice(uint256 _ethAmount) external view
         returns (uint256 amount0, uint256 amount1)
     {
-        return _calcDesiredTokensAmountsFromCurrentPoolSqrtPrice(_ethAmount);
+        return _calcTokensAmountsFromCurrentPoolSqrtPrice(_ethAmount);
     }
 
     function calcDesiredAndMinTokenAmounts() external {
@@ -263,10 +263,10 @@ contract TestUniV3LiquidityProvider is
         require(currentTick > POSITION_LOWER_TICK && currentTick < POSITION_UPPER_TICK);
 
         // Calc amounts based on current pool sqrtPriceX96
-        // (ourAmount0, ourAmount1) = _calcDesiredTokensAmountsFromCurrentPoolSqrtPrice(ethAmount - ETH_AMOUNT_MARGIN);
+        // (ourAmount0, ourAmount1) = _calcTokensAmountsFromCurrentPoolSqrtPrice(ethAmount - ETH_AMOUNT_MARGIN);
         // sqrtPriceX86 = TickMath.getSqrtRatioAtTick(currentTick);
-        ourRatio = _calcDesiredTokensRatioFromSqrtPrice(sqrtPriceX86);
-        (ourAmount0, ourAmount1) = _calcDesiredTokenAmountsFromRatio(ourRatio, ethAmount - ETH_AMOUNT_MARGIN);
+        ourRatio = _calcTokensRatioFromSqrtPrice(sqrtPriceX86);
+        (ourAmount0, ourAmount1) = _calcTokenAmountsFromRatio(ourRatio, ethAmount - ETH_AMOUNT_MARGIN);
         desiredWstethAmount = ourAmount0;
         desiredWethAmount = ourAmount1;
 
