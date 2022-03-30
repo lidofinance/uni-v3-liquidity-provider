@@ -13,6 +13,7 @@ deployer = accounts[0]
 
 pool = interface.IUniswapV3Pool(POOL)
 wsteth_token = interface.WSTETH(WSTETH_TOKEN)
+weth_token = interface.WSTETH(WETH_TOKEN)
 
 provider = TestUniV3LiquidityProvider.deploy(
     ETH_TO_SEED,
@@ -26,9 +27,12 @@ swapper = TokensSwapper.deploy({'from': deployer})
 
 def print_stats():
     diff_from_chainlink = deviation_percent(provider.getSpotPrice(), provider.getChainlinkBasedWstethPrice())
+    total_wsteth_in_pool = wsteth_token.balanceOf(POOL)
+    total_weth_in_pool = weth_token.balanceOf(POOL)
 
     print(
         f'Current state:\n'
+        f'  total wsteth / weth in pool = {formatE18(total_wsteth_in_pool)} / {formatE18(total_weth_in_pool)}\n'
         f'  current pool tick = {provider.getCurrentPriceTick()}\n'
         f'  current pool price = {formatE18(provider.getSpotPrice())}\n'
         f'  chainlink-based wsteth price = {formatE18(provider.getChainlinkBasedWstethPrice())}\n'
