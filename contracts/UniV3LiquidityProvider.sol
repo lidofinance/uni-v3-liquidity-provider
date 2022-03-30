@@ -357,7 +357,7 @@ contract UniV3LiquidityProvider {
     function _calcDesiredTokensRatioFromSqrtPrice(uint160 _sqrtPriceX96) internal view
         returns (uint256 wstEthOverWEthRatio)
     {
-        int128 liquidity = 20e18;  // just an arbitrary amount, because we care only of ratio here
+        int128 liquidity = 10e24;  // just an arbitrary amount, because we care only of ratio here
 
         int256 amount0 = SqrtPriceMath.getAmount0Delta(
             _sqrtPriceX96,
@@ -395,19 +395,17 @@ contract UniV3LiquidityProvider {
         //   weth = eth / (ratio * stEthPerToken + 1)
         //   wsteth = ratio * weth
 
-        uint256 dummyAmount = 1e27;
-        uint256 wstethPriceForDummyAmount = IWstETH(TOKEN0).getStETHByWstETH(dummyAmount);
+        uint256 oneRay = 1e27;
+        uint256 precision = oneRay;
+    
         // uint256 wstethPriceForDummyAmount = _getAmountOfEthForWsteth(dummyAmount);
-        // uint256 wstethPriceForDummyAmount = IWstETH(TOKEN0).stEthPerToken();
+        // uint256 wstethPriceForDummyAmount = IWstETH(TOKEN0).stEthPerToken()
 
-        uint256 denominator = 1e27 + (_ratio * wstethPriceForDummyAmount) / dummyAmount;
-        amount1 = (_ethAmount * 1e27 * 1e9) / denominator;
-
-        uint256 ratioPrecision = 1e27;
-        uint256 amount1AdditionalPrecision = 1e9;
-        uint256 precision = ratioPrecision * amount1AdditionalPrecision;
+        uint256 wstethPriceInRay = IWstETH(TOKEN0).getStETHByWstETH(oneRay);
+        uint256 denominator = oneRay + _ratio * wstethPriceInRay / oneRay;
+        
+        amount1 = _ethAmount * precision / denominator;
         amount0 = (amount1 * _ratio) / precision;
-        amount1 = amount1 / amount1AdditionalPrecision;
     }
 
     function _calcDesiredTokensAmountsFromCurrentPoolSqrtPrice(uint256 _ethAmount) internal view
