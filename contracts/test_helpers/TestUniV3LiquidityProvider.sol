@@ -1,5 +1,6 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.7.0;
+pragma abicoder v2;
 
 import { IUniswapV3MintCallback } from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3MintCallback.sol";
 import "../UniV3LiquidityProvider.sol";
@@ -51,10 +52,31 @@ contract TestUniV3LiquidityProvider is
         return _calcDesiredTokensRatio(_tick);
     }
 
+    function calcDesiredTokensRatioFromSqrtPrice(uint160 _sqrtPriceX86) external view returns (uint256 wstEthOverWEthRatio) {
+        return _calcDesiredTokensRatioFromSqrtPrice(_sqrtPriceX86);
+    }
+
     function calcDesiredTokenAmounts(int24 _tick, uint256 _ethAmount) external view
         returns (uint256 amount0, uint256 amount1)
     {
         (amount0, amount1) = _calcDesiredTokenAmounts(_tick, _ethAmount);
+    }
+
+    // function calcDesiredTokensRatioFromSqrtPrice(uint160 _sqrtPriceX96) external view
+    // {
+    //     return _calcDesiredTokensRatioFromSqrtPrice(_sqrtPriceX96);
+    // }
+
+    // function calcDesiredTokenAmountsFromRatio(uint256 _ratio, uint256 _ethAmount) external view
+    //     returns (uint256 amount0, uint256 amount1)
+    // {
+    //     return _calcDesiredTokenAmountsFromRatio(_ratio, _ethAmount);
+    // }
+
+    function calcDesiredTokensAmountsFromCurrentPoolSqrtPrice(uint256 _ethAmount) external view
+        returns (uint256 amount0, uint256 amount1)
+    {
+        return _calcDesiredTokensAmountsFromCurrentPoolSqrtPrice(_ethAmount);
     }
 
     function calcDesiredAndMinTokenAmounts() external {
@@ -152,6 +174,11 @@ contract TestUniV3LiquidityProvider is
         return TickMath.getSqrtRatioAtTick(_tick);
     }
 
+    // A wrapper around library function
+    function getTickAtSqrtRatio(uint160 _sqrtRatioX96) external view returns (int24) {
+        return TickMath.getTickAtSqrtRatio(_sqrtRatioX96);
+    }
+
     // A wrapper around library function for current pool state
     function getLiquidityForAmounts(uint256 amount0, uint256 amount1) external view returns (uint128 liquidity)
     {
@@ -203,6 +230,86 @@ contract TestUniV3LiquidityProvider is
         
         return this.onERC721Received.selector;
     }
+
+
+    /**
+     * FUNCTION FOR TEST PURPOSES
+     * 
+     * @param _desiredTick New desired tick
+     */
+    function mintTest(int24 _desiredTick) external authAdminOrDao() returns (
+        uint256 tokenId,
+        uint128 liquidity,
+        uint256 amount0,
+        uint256 amount1,
+        uint256 ourAmount0,
+        uint256 ourAmount1,
+        uint256 poolRatio,
+        uint256 ourRatio
+    ) {
+        require(_desiredTick >= MIN_ALLOWED_DESIRED_TICK && _desiredTick <= MAX_ALLOWED_DESIRED_TICK,
+            'DESIRED_TICK_IS_OUT_OF_ALLOWED_RANGE');
+
+        desiredTick = _desiredTick;
+        require(desiredTick > POSITION_LOWER_TICK && desiredTick < POSITION_UPPER_TICK); // just one more sanity check
+
+        _calcDesiredAndMinTokenAmounts();
+        require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_DEVIATION_TOO_BIG_AT_START");
+
+        _emitEventWithCurrentLiquidityParameters();
+
+        // One more sanity check: check current tick is within position range
+        (uint160 sqrtPriceX86, int24 currentTick, , , , , ) = POOL.slot0();
+        require(currentTick > POSITION_LOWER_TICK && currentTick < POSITION_UPPER_TICK);
+
+        // Calc amounts based on current pool sqrtPriceX96
+        // (ourAmount0, ourAmount1) = _calcDesiredTokensAmountsFromCurrentPoolSqrtPrice(ethAmount - ETH_AMOUNT_MARGIN);
+        // sqrtPriceX86 = TickMath.getSqrtRatioAtTick(currentTick);
+        ourRatio = _calcDesiredTokensRatioFromSqrtPrice(sqrtPriceX86);
+        (ourAmount0, ourAmount1) = _calcDesiredTokenAmountsFromRatio(ourRatio, ethAmount - ETH_AMOUNT_MARGIN);
+        desiredWstethAmount = ourAmount0;
+        desiredWethAmount = ourAmount1;
+
+        _wrapEthToTokens(desiredWstethAmount, desiredWethAmount);
+
+        IERC20(TOKEN0).approve(address(NONFUNGIBLE_POSITION_MANAGER), desiredWstethAmount);
+        IERC20(TOKEN1).approve(address(NONFUNGIBLE_POSITION_MANAGER), desiredWethAmount);
+
+        INonfungiblePositionManager.MintParams memory params =
+            INonfungiblePositionManager.MintParams({
+                token0: TOKEN0,
+                token1: TOKEN1,
+                fee: POOL.fee(),
+                tickLower: POSITION_LOWER_TICK,
+                tickUpper: POSITION_UPPER_TICK,
+                amount0Desired: desiredWstethAmount,
+                amount1Desired: desiredWethAmount,
+                amount0Min: 0,
+                amount1Min: 0,
+                recipient: LIDO_AGENT,
+                deadline: block.timestamp
+            });
+        
+
+        (tokenId, liquidity, amount0, amount1) = NONFUNGIBLE_POSITION_MANAGER.mint(params);
+        liquidityProvided = liquidity;
+        liquidityPositionTokenId = tokenId;
+
+        poolRatio = (amount0 * 1e18) / amount1;
+
+        IERC20(TOKEN0).approve(address(NONFUNGIBLE_POSITION_MANAGER), 0);
+        IERC20(TOKEN1).approve(address(NONFUNGIBLE_POSITION_MANAGER), 0);
+
+        emit LiquidityProvided(tokenId, liquidity, amount0, amount1);
+
+        // require(amount0 >= minWstethAmount, "AMOUNT0_TOO_LITTLE");
+        // require(amount1 >= minWethAmount, "AMOUNT1_TOO_LITTLE");
+        require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_DEVIATION_TOO_BIG_AFTER_SEEDING");
+        require(LIDO_AGENT == NONFUNGIBLE_POSITION_MANAGER.ownerOf(tokenId));
+
+        _refundLeftoversToLidoAgent();
+    }
+
 
     function _getChainlinkFeedLatestRoundDataPrice() internal view virtual returns (int256) {
         ( , int256 price, , uint256 timeStamp, ) = ChainlinkAggregatorV3Interface(CHAINLINK_STETH_ETH_PRICE_FEED).latestRoundData();

@@ -8,6 +8,7 @@ import { TickMath } from "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import { TransferHelper } from "@uniswap/v3-core/contracts/libraries/TransferHelper.sol";
 import "@uniswap/v3-core/contracts/libraries/SqrtPriceMath.sol";
 import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
+// import "@uniswap/v3-core/contracts/libraries/FullMath.sol";
 
 import '@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol';
 
@@ -54,7 +55,8 @@ contract UniV3LiquidityProvider {
     // Amount of ETH we don't use for calculations of token amounts
     // Need this because token amounts calculations a bit incorrect and 
     // produce amounts of tokens conversion to which requires a bit more of wei
-    uint256 public constant ETH_AMOUNT_MARGIN = 500;
+    // uint256 public constant ETH_AMOUNT_MARGIN = 500;
+    uint256 public constant ETH_AMOUNT_MARGIN = 0;
 
     /// Note this value is a subject of logarithm based calculations, it is not just
     /// that "1" corresponds to 0.01% as it might seem. But might be very close at current price
@@ -233,13 +235,15 @@ contract UniV3LiquidityProvider {
                 tickUpper: POSITION_UPPER_TICK,
                 amount0Desired: desiredWstethAmount,
                 amount1Desired: desiredWethAmount,
-                amount0Min: minWstethAmount,
-                amount1Min: minWethAmount,
+                // amount0Min: minWstethAmount,
+                // amount1Min: minWethAmount,
+                amount0Min: 0,
+                amount1Min: 0,
                 recipient: LIDO_AGENT,
                 deadline: block.timestamp
             });
-
         (tokenId, liquidity, amount0, amount1) = NONFUNGIBLE_POSITION_MANAGER.mint(params);
+
         liquidityProvided = liquidity;
         liquidityPositionTokenId = tokenId;
         
@@ -248,8 +252,8 @@ contract UniV3LiquidityProvider {
 
         emit LiquidityProvided(tokenId, liquidity, amount0, amount1);
 
-        require(amount0 >= minWstethAmount, "AMOUNT0_TOO_LITTLE");
-        require(amount1 >= minWethAmount, "AMOUNT1_TOO_LITTLE");
+        // require(amount0 >= minWstethAmount, "AMOUNT0_TOO_LITTLE");
+        // require(amount1 >= minWethAmount, "AMOUNT1_TOO_LITTLE");
         require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_DEVIATION_TOO_BIG_AFTER_SEEDING");
         require(LIDO_AGENT == NONFUNGIBLE_POSITION_MANAGER.ownerOf(tokenId));
 
@@ -264,7 +268,7 @@ contract UniV3LiquidityProvider {
         uint256 amount1Fees
     ) {
         // TODO: maybe adjust amount{0,1}Min for slippage protection
-        //       is sandwitch scary? is anything else is scarry?
+        //       is sandwich scary? is anything else is scarry?
 
         // amount0Min and amount1Min are price slippage checks
         // if the amount received after burning is not greater than these minimums, transaction will fail
@@ -346,23 +350,72 @@ contract UniV3LiquidityProvider {
      * @return wstEthOverWEthRatio (desiredWstethAmount / desiredWethAmount)
      */
     function _calcDesiredTokensRatio(int24 _tick) internal view returns (uint256 wstEthOverWEthRatio) {
-        int128 liquidity = 20e18;  // just an arbitrary amount, because we care only of ratio here
         uint160 sqrtPriceX96 = TickMath.getSqrtRatioAtTick(_tick);
+        return _calcDesiredTokensRatioFromSqrtPrice(sqrtPriceX96);
+    }
+
+    function _calcDesiredTokensRatioFromSqrtPrice(uint160 _sqrtPriceX96) internal view
+        returns (uint256 wstEthOverWEthRatio)
+    {
+        int128 liquidity = 20e18;  // just an arbitrary amount, because we care only of ratio here
 
         int256 amount0 = SqrtPriceMath.getAmount0Delta(
-            sqrtPriceX96,
+            _sqrtPriceX96,
             TickMath.getSqrtRatioAtTick(POSITION_UPPER_TICK),
             liquidity
         );
         int256 amount1 = SqrtPriceMath.getAmount1Delta(
             TickMath.getSqrtRatioAtTick(POSITION_LOWER_TICK),
-            sqrtPriceX96,
+            _sqrtPriceX96,
             liquidity
         );
         require(amount0 > 0);
         require(amount1 > 0);
 
-        wstEthOverWEthRatio = uint256((amount0 * 1e18) / amount1);
+        int256 precision = 1e27;
+        wstEthOverWEthRatio = uint256((amount0 * precision) / amount1);
+    }
+
+    /**
+     * Calc token amounts from wsteth/weth ratio
+     *
+     * @param _ratio wsteth/weth target ratio with e27 precision
+     * @param _ethAmount eth amount to use
+     * @return amount0 Amounts of wsteth
+     * @return amount1 Amount of weth
+     */
+    function _calcDesiredTokenAmountsFromRatio(uint256 _ratio, uint256 _ethAmount) internal view
+        returns (uint256 amount0, uint256 amount1)
+    {
+        // The system from which the formulas derived:
+        //   ratio = wsteth / weth
+        //   eth = stEthPerToken * wsteth + weth
+        //
+        // The formulas used for calculation
+        //   weth = eth / (ratio * stEthPerToken + 1)
+        //   wsteth = ratio * weth
+
+        uint256 dummyAmount = 1e27;
+        uint256 wstethPriceForDummyAmount = IWstETH(TOKEN0).getStETHByWstETH(dummyAmount);
+        // uint256 wstethPriceForDummyAmount = _getAmountOfEthForWsteth(dummyAmount);
+        // uint256 wstethPriceForDummyAmount = IWstETH(TOKEN0).stEthPerToken();
+
+        uint256 denominator = 1e27 + (_ratio * wstethPriceForDummyAmount) / dummyAmount;
+        amount1 = (_ethAmount * 1e27 * 1e9) / denominator;
+
+        uint256 ratioPrecision = 1e27;
+        uint256 amount1AdditionalPrecision = 1e9;
+        uint256 precision = ratioPrecision * amount1AdditionalPrecision;
+        amount0 = (amount1 * _ratio) / precision;
+        amount1 = amount1 / amount1AdditionalPrecision;
+    }
+
+    function _calcDesiredTokensAmountsFromCurrentPoolSqrtPrice(uint256 _ethAmount) internal view
+        returns (uint256 amount0, uint256 amount1)
+    {
+        (uint160 sqrtRatioX96, , , , , , ) = POOL.slot0(); 
+        uint256 ratio = _calcDesiredTokensRatioFromSqrtPrice(sqrtRatioX96);
+        return _calcDesiredTokenAmountsFromRatio(ratio, _ethAmount);
     }
 
     function _calcDesiredTokenAmounts(int24 _tick, uint256 _ethAmount) internal view
@@ -372,14 +425,31 @@ contract UniV3LiquidityProvider {
         // weth_amount = eth_to_use / (1 + wsteth_to_weth_ratio * wsteth_token.stEthPerToken() / 1e18)
         // wsteth_amount = weth_amount * wsteth_to_weth_ratio
 
-        uint256 dummyAmount = 300e18;
-        uint256 wstethPrice = IWstETH(TOKEN0).getStETHByWstETH(dummyAmount);
+        // uint256 dummyAmount = 300e18;
+        // uint256 dummyAmount = ethAmount - ETH_AMOUNT_MARGIN;
+
+        // uint256 dummyAmount = 1e18;
+        // uint256 wstethPriceForDummyAmount = IWstETH(TOKEN0).stEthPerToken();
+
+        // uint256 dummyAmount = 1e18;
+        // uint256 wstethPriceForDummyAmount = IWstETH(TOKEN0).getStETHByWstETH(dummyAmount);
+
+        uint256 dummyAmount = _ethAmount;
+        // uint256 dummyAmount = 1e18;
+        uint256 wstethPriceForDummyAmount = _getAmountOfEthForWsteth(dummyAmount);
 
         uint256 wstEthOverWEthRatio = _calcDesiredTokensRatio(_tick);
-        uint256 denom = 1e18 + (wstEthOverWEthRatio * wstethPrice) / dummyAmount;
+
+        // old way (2 lines)
+        uint256 denom = 1e18 + (wstEthOverWEthRatio * wstethPriceForDummyAmount) / dummyAmount;
         amount1 = (_ethAmount * 1e18) / denom;
+
+        // amount1 = (1e36 * _ethAmount) / ((wstEthOverWEthRatio * wstethPriceForDummyAmount) / dummyAmount + 1e36);
+
         amount0 = (amount1 * wstEthOverWEthRatio) / 1e18;
     }
+
+
 
     function _calcDesiredAndMinTokenAmounts() internal {
         uint256 ethAmountToUse = ethAmount - ETH_AMOUNT_MARGIN;

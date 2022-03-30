@@ -338,7 +338,7 @@ def test_mint_succeeds_if_small_positive_tick_deviation(deployer, provider, pool
 
     # 23 Mar: swap 260 weth; tick (desired/before/after): 627/629/668 (deviation 41) PASSED
     # 23 Mar: swap 270 weth; tick (desired/before/after): 627/629/673 (deviation 46) FAILED Price slippage check
-    weth_to_swap = toE18(270)
+    weth_to_swap = toE18(250)
 
     tickBefore = provider.getCurrentPriceTick()
     swapper.swapWeth({'from': deployer, 'value': weth_to_swap})
@@ -357,7 +357,122 @@ def test_mint_succeeds_if_small_positive_tick_deviation(deployer, provider, pool
     assert_liquidity_provided(provider, pool, position_manager, token_id)
 
 
-def test_amounts_pool_calculations_on_edges(deployer, provider, swapper):
+def test_debug_calculations_from_pool_sqrt_price(deployer, provider, swapper):
+    deployer.transfer(provider.address, ETH_TO_SEED)
+
+    # This will influence (amount1 - our_amount1) in last assert: from -1 to ~ -2500
+    # swapper.swapWsteth({'from': deployer, 'value': toE18(50)})
+
+    # mint and see if amounts calculated by us based on actual pool slot0 sqrtPriceX96
+    # are the same amounts which used by positionManager
+    tx = provider.mintTest(provider.desiredTick())
+    (_, _, wsteth, weth, our_wsteth, our_weth, pool_ratio, our_ratio) = tx.return_value
+
+    print(f'current tick: {provider.getCurrentPriceTick()}')
+
+    assert pool_ratio - our_ratio == 0
+
+    # this passes
+    assert wsteth - our_wsteth == 0, f'wsteth diff {formatE18(wsteth - our_wsteth)}'  
+
+    # this differs by 2573 for tick 653 and sqrtPriceX96 taken from pool
+
+    # this differs by -0.1263 (-126317206228106554) for tick 653 and sqrtPriceX96 calculated with TickMath.getSqrtRatioAtTick
+    # 29 Mar: differs by -1 for tick 632 and sqrtPriceX96 taken from pool
+
+    assert weth - our_weth == 0, f'weth diff {formatE18(weth - our_weth)}'
+
+
+def test_debug_calc_token_amounts_from_pool_sqrt_price(deployer, provider, swapper):
+    """Not a test but an illustration of deviation of amounts calculated by
+       us and by pool.
+    Do:
+    - take current tick of the pool
+    - calc token amounts by our contract
+    - calc liquidity amount for these amounts of tokens
+    - calc amounts of tokens by pool, given the liquidity
+    - compare calculated token amounts
+    - 
+    - shift pool current tick
+    - repeat the checks
+    """
+    deployer.transfer(provider.address, toE18(100000))
+    eth = ETH_TO_SEED
+
+    swapper.swapWsteth({'from': deployer, 'value': toE18(50)})
+
+    tick = provider.getCurrentPriceTick()
+    our_wsteth, our_weth = provider.calcDesiredTokensAmountsFromCurrentPoolSqrtPrice(eth)
+
+    print(f'our wsteth/weth {formatE18(our_wsteth)} / {formatE18(our_weth)}')
+
+    # ratio = provider.calcDesiredTokensRatioFromSqrtPrice()
+    # our_amount0, our_amount1 = provider.calcDesiredTokenAmountsFromRatio(ratio, eth)
+
+    liquidity = provider.getLiquidityForAmounts(our_wsteth, our_weth)
+
+    tx = provider.calcTokenAmountsByPool(liquidity)
+    pool_wsteth, pool_weth = tx.return_value
+
+    print(
+        f'Token amounts for tick {tick}\n'
+        f'     wsteth (our/pool): {formatE18(our_wsteth)} / {formatE18(pool_wsteth)}  (difference {formatE18(abs(pool_wsteth - our_wsteth))})\n'
+        f'     weth   (our/pool): {formatE18(our_weth)} / {formatE18(pool_weth)}  (difference {formatE18(abs(pool_weth - our_weth))})\n'
+    )
+
+    assert our_wsteth - pool_wsteth == 0, f'wsteth diff {formatE18(pool_wsteth - our_wsteth)}'  
+    assert our_weth - pool_weth == 0, f'weth diff {formatE18(pool_weth - our_weth)}'  
+
+
+def test_amounts_pool_calculations_after_positive_tick_shift(deployer, provider, swapper):
+    """Not a test but an illustration of deviation of amounts calculated by
+       us and by pool.
+    Do:
+    - take current tick of the pool
+    - calc token amounts by our contract
+    - calc liquidity amount for these amounts of tokens
+    - calc amounts of tokens by pool, given the liquidity
+    - compare calculated token amounts
+    - 
+    - shift pool current tick
+    - repeat the checks
+    """
+    deployer.transfer(provider.address, toE18(100000))
+    eth = ETH_TO_SEED
+
+    tick = provider.getCurrentPriceTick()
+    our_amount0, our_amount1 = provider.calcDesiredTokenAmounts(tick, eth)
+
+    liquidity = provider.getLiquidityForAmounts(our_amount0, our_amount1)
+
+    tx = provider.calcTokenAmountsByPool(liquidity)
+    pool_amount0, pool_amount1 = tx.return_value
+
+    print(
+        f'Token amounts for tick {tick}\n'
+        f'     our: {formatE18(our_amount0)}, {formatE18(our_amount1)}\n'
+        f'    pool: {formatE18(pool_amount0)}, {formatE18(pool_amount1)}\n'
+    )
+
+
+    swapper.swapWeth({'from': deployer, 'value': toE18(200)})
+
+    tick = provider.getCurrentPriceTick()
+    our_amount0, our_amount1 = provider.calcDesiredTokenAmounts(tick, eth)
+
+    liquidity = provider.getLiquidityForAmounts(our_amount0, our_amount1)
+
+    tx = provider.calcTokenAmountsByPool(liquidity)
+    pool_amount0, pool_amount1 = tx.return_value
+
+    print(
+        f'Token amounts after swapping (for tick {tick})\n'
+        f'     our: {formatE18(our_amount0)}, {formatE18(our_amount1)}\n'
+        f'    pool: {formatE18(pool_amount0)}, {formatE18(pool_amount1)}\n'
+    )
+
+
+def test_amounts_pool_calculations_after_negative_tick_shift(deployer, provider, swapper):
     """Not a test but an illustration of deviation of amounts calculated by
        us and by pool.
     Do:
@@ -388,8 +503,7 @@ def test_amounts_pool_calculations_on_edges(deployer, provider, swapper):
 
     )
 
-
-    swapper.swapWeth({'from': deployer, 'value': toE18(300)})
+    swapper.swapWsteth({'from': deployer, 'value': toE18(320)})
 
     tick = provider.getCurrentPriceTick()
     our_amount0, our_amount1 = provider.calcDesiredTokenAmounts(tick, eth)
@@ -509,6 +623,15 @@ def test_tickMath_sqrtPriceRatioAtTick(deployer, provider, swapper):
     tick = provider.getCurrentPriceTick()
     print(f'pool tick after shift: {tick}')
     assert deviation_percent(provider.getCurrentSqrtPriceX96(), provider.getSqrtRatioAtTick(tick)) < 0.003
+
+
+def test_tickMath_getTickAtSqrtRatio(provider):
+    """Illustration of difference between sqrtRatio in between of ticks
+    and sqrtRatio calculated from tick"""
+    sqrtRatioMiddleX96 = (provider.getSqrtRatioAtTick(932) + provider.getSqrtRatioAtTick(933)) // 2
+    tickForMiddle = provider.getTickAtSqrtRatio(sqrtRatioMiddleX96)
+    sqrtRatioFromTickX96 = provider.getSqrtRatioAtTick(tickForMiddle)
+    assert sqrtRatioFromTickX96 != sqrtRatioMiddleX96
 
 
 # def test_compare_with_calc_token_amounts_by_pool(deployer, provider):
