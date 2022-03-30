@@ -34,16 +34,16 @@ contract TestUniV3LiquidityProvider is
 
     address public constant CHAINLINK_STETH_ETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
 
+    uint256 public constant TOTAL_POINTS = 10000;  // Amount of points in 100%
+
     constructor(
         uint256 _ethAmount,
-        int24 _desiredTick,
-        uint24 _maxTickDeviation,
-        uint24 _maxAllowedDesiredTickChange
+        int24 _minAllowedTick,
+        int24 _maxAllowedTick
     ) UniV3LiquidityProvider(
         _ethAmount,
-        _desiredTick,
-        _maxTickDeviation,
-        _maxAllowedDesiredTickChange
+        _minAllowedTick,
+        _maxAllowedTick
     ) {
     }
 
@@ -79,22 +79,18 @@ contract TestUniV3LiquidityProvider is
         return _calcTokenAmountsFromCurrentPoolSqrtPrice(_ethAmount);
     }
 
-    function calcMinTokenAmounts(int24 _desiredTick, uint24 _maxTickDeviation) external view
+    function calcMinTokenAmounts(int24 _minTick, int24 _maxTick) external view
         returns (
             uint256 minWsteth,
             uint256 minWeth
     ) {
-        return _calcMinTokenAmounts(_desiredTick, _maxTickDeviation);
+        return _calcMinTokenAmounts(_minTick, _maxTick);
     }
 
     function priceDeviationPoints(uint256 _priceOne, uint256 _priceTwo)
         public view returns (uint256 difference)
     {
         return _priceDeviationPoints(_priceOne, _priceTwo);
-    }
-
-    function deviationFromDesiredTick() external view returns (uint24) {
-        return _deviationFromDesiredTick();
     }
 
     function getAmountOfEthForWsteth(uint256 _amountOfWsteth) external view returns (uint256) {
@@ -145,17 +141,17 @@ contract TestUniV3LiquidityProvider is
     ){
         (
             ,
-            address operator,
             ,
             ,
             ,
-            int24 tickLower,
-            int24 tickUpper,
-            uint128 liquidity,
+            ,
+            tickLower,
+            tickUpper,
+            liquidity,
             ,
             ,
-            uint128 tokensOwed0,
-            uint128 tokensOwed1
+            tokensOwed0,
+            tokensOwed1
         ) = NONFUNGIBLE_POSITION_MANAGER.positions(_tokenId);
     }
 
@@ -238,99 +234,6 @@ contract TestUniV3LiquidityProvider is
             NONFUNGIBLE_POSITION_MANAGER.positions(_tokenId);
         
         return this.onERC721Received.selector;
-    }
-
-
-    /**
-     * FUNCTION FOR TEST PURPOSES
-     * 
-     * @param _desiredTick New desired tick
-     */
-    function mintTest(int24 _desiredTick, uint24 _maxTickDeviation) external authAdminOrDao() returns (
-        uint256 tokenId,
-        uint128 liquidity,
-        uint256 amount0,
-        uint256 amount1
-        // uint256 ourAmount0,
-        // uint256 ourAmount1
-    ) {
-        require(_desiredTick >= MIN_ALLOWED_DESIRED_TICK && _desiredTick <= MAX_ALLOWED_DESIRED_TICK,
-            'DESIRED_TICK_IS_OUT_OF_ALLOWED_RANGE');
-
-        desiredTick = _desiredTick;
-        require(desiredTick > POSITION_LOWER_TICK && desiredTick < POSITION_UPPER_TICK); // just one more sanity check
-
-        // _calcDesiredAndMinTokenAmounts();
-        require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_DEVIATION_TOO_BIG_AT_START");
-
-        // One more sanity check: check current tick is within position range
-        // (uint160 sqrtPriceX86, int24 currentTick, , , , , ) = POOL.slot0();
-        // require(currentTick > POSITION_LOWER_TICK && currentTick < POSITION_UPPER_TICK);
-
-        // (uint256 desWsteth, uint256 desWeth, uint256 minWsteth, uint256 minWeth, , )
-        //     = _calcDesiredAndMinTokenAmounts2(_desiredTick, _maxTickDeviation);
-
-        // uint256 maxWsteth;
-        // uint256 maxWeth;
-
-        // Calc amounts based on current pool sqrtPriceX96
-        // (ourAmount0, ourAmount1) = _calcTokensAmountsFromCurrentPoolSqrtPrice(ethAmount - ETH_AMOUNT_MARGIN);
-        // sqrtPriceX86 = TickMath.getSqrtRatioAtTick(currentTick);
-
-        // ourRatioE27 = _calcTokensRatioFromSqrtPrice(sqrtPriceX86);
-        // (ourAmount0, ourAmount1) = _calcTokenAmountsFromRatio(ourRatio, ethAmount - ETH_AMOUNT_MARGIN);
-
-        // (ourAmount0, ourAmount1) = _calcTokensAmountsFromCurrentPoolSqrtPrice(ethAmount - ETH_AMOUNT_MARGIN);
-        // desiredWstethAmount = ourAmount0;
-        // desiredWethAmount = ourAmount1;
-
-        (uint256 desWsteth, uint256 desWeth) = _calcTokenAmountsFromCurrentPoolSqrtPrice(ethAmount);
-
-        _wrapEthToTokens(desWsteth, desWeth);
-
-        (uint256 minWsteth, uint256 minWeth) = _calcMinTokenAmounts(_desiredTick, _maxTickDeviation);
-
-
-        IERC20(TOKEN0).approve(address(NONFUNGIBLE_POSITION_MANAGER), desWsteth);
-        IERC20(TOKEN1).approve(address(NONFUNGIBLE_POSITION_MANAGER), desWeth);
-        // IERC20(TOKEN0).approve(address(NONFUNGIBLE_POSITION_MANAGER), maxWsteth);
-        // IERC20(TOKEN1).approve(address(NONFUNGIBLE_POSITION_MANAGER), maxWeth);
-
-        INonfungiblePositionManager.MintParams memory params =
-            INonfungiblePositionManager.MintParams({
-                token0: TOKEN0,
-                token1: TOKEN1,
-                fee: POOL.fee(),
-                tickLower: POSITION_LOWER_TICK,
-                tickUpper: POSITION_UPPER_TICK,
-                amount0Desired: desWsteth,
-                amount1Desired: desWeth,
-                // amount0Min: 0,
-                // amount1Min: 0,
-                amount0Min: minWsteth,
-                amount1Min: minWeth,
-                recipient: LIDO_AGENT,
-                deadline: block.timestamp
-            });
-        
-
-        (tokenId, liquidity, amount0, amount1) = NONFUNGIBLE_POSITION_MANAGER.mint(params);
-        liquidityProvided = liquidity;
-        liquidityPositionTokenId = tokenId;
-
-        // poolRatioE27 = (amount0 * 1e27) / amount1;
-
-        IERC20(TOKEN0).approve(address(NONFUNGIBLE_POSITION_MANAGER), 0);
-        IERC20(TOKEN1).approve(address(NONFUNGIBLE_POSITION_MANAGER), 0);
-
-        emit LiquidityProvided(tokenId, liquidity, amount0, amount1);
-
-        // require(amount0 >= minWstethAmount, "AMOUNT0_TOO_LITTLE");
-        // require(amount1 >= minWethAmount, "AMOUNT1_TOO_LITTLE");
-        require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_DEVIATION_TOO_BIG_AFTER_SEEDING");
-        require(LIDO_AGENT == NONFUNGIBLE_POSITION_MANAGER.ownerOf(tokenId));
-
-        _refundLeftoversToLidoAgent();
     }
 
 

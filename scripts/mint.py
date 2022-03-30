@@ -18,14 +18,11 @@ def main(deployer=None, skip_confirmation=False):
     provider_address = read_deploy_address()
     provider = UniV3LiquidityProvider.at(provider_address)
 
-    desired_tick = MINT_DESIRED_TICK
-
     print(
         f'Going to provide liquidity to Uni-v3 pool with the following parameters:\n'
-        f'  old desired tick: {provider.desiredTick()}\n'
-        f'  new desired tick: {desired_tick}\n'
-        f'  max tick deviation: {provider.MAX_TICK_DEVIATION()}\n'
-        f'  eth to seed: {provider.ethAmount()}\n'
+        f'  min tick: {MIN_TICK}\n'
+        f'  max tick: {MAX_TICK}\n'
+        f'  eth to seed: {formatE18(provider.ethAmount())}\n'
         f'  eth on the contract: {formatE18(provider.balance())}\n'
     )
 
@@ -35,15 +32,15 @@ def main(deployer=None, skip_confirmation=False):
             print("Operator hasn't approved correctness of the parameters. Deployment stopped.")
             sys.exit(1)
 
-    tx = provider.mint(desired_tick)
+    tx = provider.mint(MIN_TICK, MAX_TICK)
     token_id, liquidity, wsteth_amount, weth_amount = tx.return_value
 
     print(
         f'Liquidity provided:\n'
         f'  position token is: {token_id}\n'
         f'  amount of liquidity: {liquidity}\n'
-        f'  wsteth amount: {wsteth_amount}\n'
-        f'  weth amount: {weth_amount}\n'
+        f'  wsteth amount: {formatE18(wsteth_amount)}\n'
+        f'  weth amount: {formatE18(weth_amount)}\n'
     )
 
     return tx

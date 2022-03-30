@@ -44,9 +44,8 @@ def lido_agent():
 def provider(deployer, TestUniV3LiquidityProvider):
     return TestUniV3LiquidityProvider.deploy(
         ETH_TO_SEED,
-        INITIAL_DESIRED_TICK,
-        MAX_TICK_DEVIATION,
-        MAX_ALLOWED_DESIRED_TICK_CHANGE,
+        MIN_ALLOWED_TICK,
+        MAX_ALLOWED_TICK,
         {'from': deployer})
 
 # making scope 'module' causes "This contract no longer exists" errors

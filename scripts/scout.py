@@ -17,9 +17,8 @@ weth_token = interface.WSTETH(WETH_TOKEN)
 
 provider = TestUniV3LiquidityProvider.deploy(
     ETH_TO_SEED,
-    INITIAL_DESIRED_TICK,
-    MAX_TICK_DEVIATION,
-    MAX_ALLOWED_DESIRED_TICK_CHANGE,
+    MIN_ALLOWED_TICK,
+    MAX_ALLOWED_TICK,
     {'from': deployer})
 
 swapper = TokensSwapper.deploy({'from': deployer})

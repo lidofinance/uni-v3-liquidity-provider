@@ -18,9 +18,8 @@ def main(deployer=None, skip_confirmation=False):
     print(
         f'Going to deploy with the following parameters:\n'
         f'  ETH_TO_SEED: {formatE18(ETH_TO_SEED)}\n'
-        f'  INITIAL_DESIRED_TICK: {INITIAL_DESIRED_TICK}\n'
-        f'  MAX_TICK_DEVIATION: {MAX_TICK_DEVIATION}\n'
-        f'  MAX_ALLOWED_DESIRED_TICK_CHANGE: {MAX_ALLOWED_DESIRED_TICK_CHANGE}\n'
+        f'  MIN_ALLOWED_TICK: {MIN_ALLOWED_TICK}\n'
+        f'  MAX_ALLOWED_TICK: {MAX_ALLOWED_TICK}\n'
     )
 
     if not skip_confirmation:
@@ -31,9 +30,8 @@ def main(deployer=None, skip_confirmation=False):
 
     provider = UniV3LiquidityProvider.deploy(
         ETH_TO_SEED,
-        INITIAL_DESIRED_TICK,
-        MAX_TICK_DEVIATION,
-        MAX_ALLOWED_DESIRED_TICK_CHANGE,
+        MIN_ALLOWED_TICK,
+        MAX_ALLOWED_TICK,
         {'from': deployer}
     )
 

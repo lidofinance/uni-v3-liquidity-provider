@@ -4,17 +4,15 @@ from scripts.utils import *
 # Parameters used for contract deployment
 # #######################################
 ETH_TO_SEED = toE18(600)
-INITIAL_DESIRED_TICK = 627
-MAX_TICK_DEVIATION = 50
-
-# max abs value admin or dao can change initial desired tick
-MAX_ALLOWED_DESIRED_TICK_CHANGE = 45
+MIN_ALLOWED_TICK = 637 - 100
+MAX_ALLOWED_TICK = 637 + 100
 
 
 # #####################################
 # Parameters used for liquidity minting
 # #####################################
-MINT_DESIRED_TICK = 632
+MIN_TICK = 637 - 50
+MAX_TICK = 637 + 50
 
 
 # #####################################

@@ -50,19 +50,13 @@ contract UniV3LiquidityProvider {
     address public constant STETH_TOKEN = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
     address public constant LIDO_AGENT = 0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c;
 
-    uint256 public constant TOTAL_POINTS = 10000; // amount of points in 100%
-
     int24 public constant POSITION_LOWER_TICK = -1630; // spot price 0.8496
     int24 public constant POSITION_UPPER_TICK = 970; // spot price 1.1019
     bytes32 public immutable POSITION_ID;
 
-    /// Note this value is a subject of logarithm based calculations, it is not just
-    /// that "1" corresponds to 0.01% as it might seem. But might be very close at current price
-    uint24 public MAX_TICK_DEVIATION;
-
-    /// Specifies an allowed range for value of desiredTick set in mint() call
-    int24 public MIN_ALLOWED_DESIRED_TICK;
-    int24 public MAX_ALLOWED_DESIRED_TICK;
+    /// Specifies an allowed range
+    int24 public MIN_ALLOWED_TICK;
+    int24 public MAX_ALLOWED_TICK;
 
     address public admin;
 
@@ -71,10 +65,6 @@ contract UniV3LiquidityProvider {
 
     /// The pool price tick we'd like not to be moved too far away from
     int24 public desiredTick;
-
-    /// Desired amounts of tokens for providing liquidity to the pool
-    uint256 public desiredWstethAmount;
-    uint256 public desiredWethAmount;
 
     /// Amount of liquidity provided for the position created in mint() function
     uint128 public liquidityProvided;
@@ -87,18 +77,6 @@ contract UniV3LiquidityProvider {
         uint256 amount
     );
 
-    /// Emitted when the liquidity parameters are modified
-    /// Contains not only modified parameters but all parameters of interest
-    event LiquidityParametersUpdated(
-        uint256 ethAmount,
-        int24 desiredTick,
-        uint24 maxTickDeviation,
-        int24 minAllowedDesiredTick,
-        int24 maxAllowedDesiredTick,
-        uint256 desiredWstethAmount,
-        uint256 desiredWethAmount
-    );
-
     /// Emitted when liquidity provided to UniswapV3 pool and
     /// liquidity position NFT is minted
     event LiquidityProvided(
@@ -106,6 +84,15 @@ contract UniV3LiquidityProvider {
         uint128 liquidity,
         uint256 wstethAmount,
         uint256 wethAmount
+    );
+
+    /// Emitted when liquidity position closed and fees collected
+    /// to the Lido treasure address by `requestedBy` sender.
+    event LiquidityRetracted(
+        uint256 wstethAmount,
+        uint256 wethAmount,
+        uint256 wstethFeesCollected,
+        uint256 wethFeesCollected
     );
 
     /// Emitted when ETH is refunded to Lido agent contract
@@ -130,43 +117,31 @@ contract UniV3LiquidityProvider {
         uint256 tokenId
     );
 
-    
-    /// Emitted when liquidity position closed and fees collected
-    /// to the Lido treasure address by `requestedBy` sender.
-    event LiquidityRetracted(
-        uint256 wstethAmount,
-        uint256 wethAmount,
-        uint256 wstethFeesCollected,
-        uint256 wethFeesCollected
-    );
-
-
     /// Emitted when new admin is set
     event AdminSet(address indexed admin);
 
     /**
      * @param _ethAmount Amount of Ether on the contract used for providing liquidity
-     * @param _desiredTick Desired price tick (may be changed when mint() is called)
-     * @param _maxTickDeviation Max tolerable deviation of pool current price
-     * @param _maxAllowedDesiredTickChange Max change (abs value) of desired tick allowed after contract deployment
-     *                                     We don't allow desired tick to be changed to much after the deployment
+     * @param _minAllowedTick TODO
+     * @param _maxAllowedTick TODO
      */
     constructor(
         uint256 _ethAmount,
-        int24 _desiredTick,
-        uint24 _maxTickDeviation,
-        uint24 _maxAllowedDesiredTickChange
+        int24 _minAllowedTick,
+        int24 _maxAllowedTick
     ) {
+        require(_minAllowedTick <= _maxAllowedTick);
+        require(_minAllowedTick >= POSITION_LOWER_TICK);
+        require(_maxAllowedTick <= POSITION_UPPER_TICK);
+
         admin = msg.sender;
 
         POSITION_ID = keccak256(abi.encodePacked(address(this), POSITION_LOWER_TICK, POSITION_UPPER_TICK));
 
         ethAmount = _ethAmount;
-        MAX_TICK_DEVIATION = _maxTickDeviation;
 
-        desiredTick = _desiredTick;
-        MIN_ALLOWED_DESIRED_TICK = _desiredTick - int24(_maxAllowedDesiredTickChange);
-        MAX_ALLOWED_DESIRED_TICK = _desiredTick + int24(_maxAllowedDesiredTickChange);
+        MIN_ALLOWED_TICK = _minAllowedTick;
+        MAX_ALLOWED_TICK = _maxAllowedTick;
     }
 
     receive() external payable {
@@ -186,40 +161,26 @@ contract UniV3LiquidityProvider {
     /**
      * Update desired tick and provide liquidity to the pool
      * 
-     * @param _desiredTick New desired tick
+     * @param _minTick Min pool tick for which liquidity is to be provided
+     * @param _maxTick Max pool tick for which liquidity is to be provided
      */
-    function mint(int24 _desiredTick) external authAdminOrDao() returns (
+    function mint(int24 _minTick, int24 _maxTick) external authAdminOrDao() returns (
         uint256 tokenId,
         uint128 liquidity,
         uint256 amount0,
         uint256 amount1
     ) {
-        require(_desiredTick >= MIN_ALLOWED_DESIRED_TICK && _desiredTick <= MAX_ALLOWED_DESIRED_TICK,
-            'DESIRED_TICK_IS_OUT_OF_ALLOWED_RANGE');
+        require(_minTick >= MIN_ALLOWED_TICK && _maxTick <= MAX_ALLOWED_TICK,
+            'DESIRED_MIN_OR_MAX_TICK_IS_OUT_OF_ALLOWED_RANGE');
 
-        desiredTick = _desiredTick;
-        require(desiredTick > POSITION_LOWER_TICK && desiredTick < POSITION_UPPER_TICK); // just one more sanity check
-        require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_DEVIATION_TOO_BIG_AT_START");
-
+        (, int24 tick, , , , , ) = POOL.slot0();
+        require(_minTick <= tick && tick <= _maxTick, "TICK_DEVIATION_TOO_BIG_AT_START");
 
         (uint256 desWsteth, uint256 desWeth) = _calcTokenAmountsFromCurrentPoolSqrtPrice(ethAmount);
 
-        uint256 balanceBefore = address(this).balance;
         _wrapEthToTokens(desWsteth, desWeth);
-        // TODO: remove this debug require
-        require(address(this).balance - (balanceBefore - ethAmount) < 2, "DEBUG_TOO_MUCH_SPARE_ETH_LEFT");
 
-        (uint256 minWsteth, uint256 minWeth) = _calcMinTokenAmounts(_desiredTick, MAX_TICK_DEVIATION);
-
-        IERC20(TOKEN0).approve(address(NONFUNGIBLE_POSITION_MANAGER), desWsteth);
-        IERC20(TOKEN1).approve(address(NONFUNGIBLE_POSITION_MANAGER), desWeth);
-
-
-        // // One more sanity check: check current tick is within position range
-        // (, int24 currentTick, , , , , ) = POOL.slot0();
-        // require(currentTick > POSITION_LOWER_TICK && currentTick < POSITION_UPPER_TICK);
-// 
-        // _wrapEthToTokens(desiredWstethAmount, desiredWethAmount);
+        (uint256 minWsteth, uint256 minWeth) = _calcMinTokenAmounts(_minTick, _maxTick);
 
         IERC20(TOKEN0).approve(address(NONFUNGIBLE_POSITION_MANAGER), desWsteth);
         IERC20(TOKEN1).approve(address(NONFUNGIBLE_POSITION_MANAGER), desWeth);
@@ -235,8 +196,6 @@ contract UniV3LiquidityProvider {
                 amount1Desired: desWeth,
                 amount0Min: minWsteth,
                 amount1Min: minWeth,
-                // amount0Min: 0,
-                // amount1Min: 0,
                 recipient: LIDO_AGENT,
                 deadline: block.timestamp
             });
@@ -245,7 +204,9 @@ contract UniV3LiquidityProvider {
         require(LIDO_AGENT == NONFUNGIBLE_POSITION_MANAGER.ownerOf(tokenId));
         require(amount0 >= minWsteth, "AMOUNT0_TOO_LITTLE");
         require(amount1 >= minWeth, "AMOUNT1_TOO_LITTLE");
-        require(_deviationFromDesiredTick() <= MAX_TICK_DEVIATION, "TICK_DEVIATION_TOO_BIG_AFTER_SEEDING");
+
+        (, tick, , , , , ) = POOL.slot0();
+        require(_minTick <= tick && tick <= _maxTick, "TICK_DEVIATION_TOO_BIG_AFTER_MINT");
 
         liquidityProvided = liquidity;
         liquidityPositionTokenId = tokenId;
@@ -346,7 +307,7 @@ contract UniV3LiquidityProvider {
      * Calc needed token ratio at given price tick for the liquidity position
      *
      * @param _tick Price tick
-     * @return wstEthOverWEthRatio (desiredWstethAmount / desiredWethAmount)
+     * @return wstEthOverWEthRatio (wstethAmount / wethAmount)
      */
     function _calcTokensRatio(int24 _tick) internal view returns (uint256 wstEthOverWEthRatio) {
         uint160 sqrtPriceX96 = TickMath.getSqrtRatioAtTick(_tick);
@@ -396,7 +357,6 @@ contract UniV3LiquidityProvider {
         //   wsteth = ratio * weth
 
 
-        // uint256 wstethPriceE27 = _getAmountOfEthForWsteth(oneE27);
         // uint256 wstethPriceE27 = IWstETH(TOKEN0).stEthPerToken();
         // uint256 wstethPriceE27 = IWstETH(TOKEN0).getStETHByWstETH(oneE27);
 
@@ -427,15 +387,15 @@ contract UniV3LiquidityProvider {
         return _calcTokenAmountsFromRatio(ratio, _ethAmount);
     }
 
-    function _calcMinTokenAmounts(int24 _desiredTick, uint24 _maxTickDeviation) internal view
+    function _calcMinTokenAmounts(int24 _minTick, int24 _maxTick) internal view
         returns (
             uint256 minWsteth,
             uint256 minWeth
     ) {
         uint256 ethAmountToUse = ethAmount;
 
-        int24 minTick = _desiredTick - int24(_maxTickDeviation) - 1;
-        int24 maxTick = _desiredTick + int24(_maxTickDeviation) + 1;
+        int24 minTick = _minTick - 1;
+        int24 maxTick = _maxTick + 1;
         (uint256 wstethForMinTick, uint256 wethForMinTick) = _calcTokenAmounts(minTick, ethAmountToUse);
         (uint256 wstethForMaxTick, uint256 wethForMaxTick) = _calcTokenAmounts(maxTick, ethAmountToUse);
 
@@ -472,25 +432,4 @@ contract UniV3LiquidityProvider {
         IWETH(TOKEN1).withdraw(IERC20(TOKEN1).balanceOf(address(this)));
         _refundETH();
     }
-
-    function _deviationFromDesiredTick() internal view returns (uint24) {
-        (, int24 currentTick, , , , , ) = POOL.slot0();
-
-        return (currentTick > desiredTick)
-            ? uint24(currentTick - desiredTick)
-            : uint24(desiredTick - currentTick);
-    }
-
-    // function _emitEventWithCurrentLiquidityParameters() internal returns (uint256) {
-    //     emit LiquidityParametersUpdated(
-    //         ethAmount,
-    //         desiredTick,
-    //         MAX_TICK_DEVIATION,
-    //         MIN_ALLOWED_DESIRED_TICK,
-    //         MAX_ALLOWED_DESIRED_TICK,
-    //         desiredWethAmount,
-    //         desiredWstethAmount
-    //     );
-    // }
-
 }
