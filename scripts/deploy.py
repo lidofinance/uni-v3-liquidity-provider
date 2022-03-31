@@ -18,10 +18,10 @@ def main(deployer=None, skip_confirmation=False):
     print(
         f'Going to deploy with the following parameters:\n'
         f'  ETH_TO_SEED: {formatE18(ETH_TO_SEED)}\n'
-        f'  MIN_ALLOWED_TICK: {MIN_ALLOWED_TICK}\n'
-        f'  MAX_ALLOWED_TICK: {MAX_ALLOWED_TICK}\n'
-        f'  POSITION_LOWER_TICK: {POSITION_LOWER_TICK}\n'
-        f'  POSITION_UPPER_TICK: {POSITION_UPPER_TICK}\n'
+        f'  POSITION_LOWER_TICK: {POSITION_LOWER_TICK} (price {get_price_from_tick(POSITION_LOWER_TICK):.4f})\n'
+        f'  POSITION_UPPER_TICK: {POSITION_UPPER_TICK} (price {get_price_from_tick(POSITION_LOWER_TICK):.4f})\n'
+        f'  MIN_ALLOWED_TICK: {MIN_ALLOWED_TICK} (price {get_price_from_tick(MIN_ALLOWED_TICK):.4f})\n'
+        f'  MAX_ALLOWED_TICK: {MAX_ALLOWED_TICK} (price {get_price_from_tick(MAX_ALLOWED_TICK):.4f})\n'
     )
 
     if not skip_confirmation:

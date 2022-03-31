@@ -9,7 +9,7 @@ import { TransferHelper } from "@uniswap/v3-core/contracts/libraries/TransferHel
 import "@uniswap/v3-core/contracts/libraries/SqrtPriceMath.sol";
 import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 
-import '@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol';
+import { INonfungiblePositionManager } from '@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol';
 
 import { IERC721 } from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import { IERC721Receiver } from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
@@ -57,10 +57,11 @@ contract UniV3LiquidityProvider {
     int24 public immutable MIN_ALLOWED_TICK;
     int24 public immutable MAX_ALLOWED_TICK;
 
-    address public admin;
-
     /// Amount of ETH to use to provide liquidity
     uint256 public immutable ETH_TO_SEED;
+
+    /// Contract admin
+    address public admin;
 
     /// Amount of liquidity provided for the position created in mint() function
     uint128 public liquidityProvided;

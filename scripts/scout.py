@@ -35,70 +35,10 @@ def print_stats():
         f'  current pool tick = {provider.getCurrentPriceTick()}\n'
         f'  current pool price = {formatE18(provider.getSpotPrice())}\n'
         f'  chainlink-based wsteth price = {formatE18(provider.getChainlinkBasedWstethPrice())}\n'
-        f'  abs deviation from chainlink price = {diff_from_chainlink:.2}%\n'
+        f'  pool price abs deviation from chainlink price = {diff_from_chainlink:.2}%\n'
     )
 
     # TODO: ? print some info about existing positions
-
-
-def get_amounts_for_liquidity(liquidity):
-    tx = provider.calcTokenAmountsByPool(liquidity)
-    wstethAmount, wethAmount = tx.return_value
-    return wstethAmount, wethAmount
-
-
-def calc_token_amounts(eth_to_use):
-    deployer.transfer(provider.address, toE18(300))
-
-    wsteth_example_amount, weth_example_amount = get_amounts_for_liquidity(toE18(50))
-    # print((wsteth_example_amount, weth_example_amount))
-
-    wsteth_to_weth_ratio = wsteth_example_amount / weth_example_amount
-    # print(wsteth_to_weth_ratio)
-
-    weth_amount = eth_to_use / (1 + wsteth_to_weth_ratio * wsteth_token.stEthPerToken() / 1e18)
-    wsteth_amount = weth_amount * wsteth_to_weth_ratio
-
-    return wsteth_amount, weth_amount
-
-
-def shift_spot_price(eth_amount):
-    weth_to_swap = eth_amount
-    swapper.swapWeth({'from': deployer, 'value': weth_to_swap})
-
-
-def calc_seeding_params(eth_amount, liquidity):
-    print({'provider balance': formatE18(provider.balance())})
-    deployer.transfer(provider.address, eth_amount)
-
-    print({'provider balance': formatE18(provider.balance())})
-
-    wsteth_amount, weth_amount = get_amounts_for_liquidity(liquidity)
-
-    print({'provider balance': formatE18(provider.balance())})
-
-    eth_used_percent = 100 * (eth_amount - provider.balance()) / eth_amount
-    pprint({
-        'wsteth amount': formatE18(wsteth_amount),
-        'weth amount': formatE18(weth_amount),
-        'eth left': formatE18(provider.balance()),
-        'eth used': f'{eth_used_percent:.1f}%',
-        'weth/wsteth ratio': f'{weth_amount / wsteth_amount:.3f}'
-    })
-
-
-def print_amounts_calculated_by_pool():
-    wsteth_amount, weth_amount = calc_token_amounts(ETH_TO_SEED)
-
-    eth_used = wsteth_amount * wsteth_token.stEthPerToken() / 1e18  + weth_amount
-
-    pprint({
-        'input eth': formatE18(ETH_TO_SEED),
-        'wsteth_amount': formatE18(wsteth_amount),
-        'weth_amount': formatE18(weth_amount),
-        'wsteth/weth ratio': wsteth_amount / weth_amount,
-        'eth_used (approx)': formatE18(eth_used),
-    })
 
 
 def main():

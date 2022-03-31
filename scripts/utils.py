@@ -23,6 +23,9 @@ def deviation_percent(value, base):
 def get_tick_from_price(price):
     return floor(log(sqrt(price), sqrt(1.0001)))
 
+def get_price_from_tick(tick):
+    return 1.0001**tick
+
 def get_tick_positions_liquidity(pool, tick):
     (liquidity_gross, _, _, _, _, _, _, _) = pool.ticks(tick)
     return liquidity_gross

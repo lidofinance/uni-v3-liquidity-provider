@@ -20,12 +20,12 @@ def main(deployer=None, skip_confirmation=False):
 
     print(
         f'Going to provide liquidity to Uni-v3 pool with the following parameters:\n'
-        f'  min tick: {MIN_TICK}\n'
-        f'  max tick: {MAX_TICK}\n'
+        f'  min tick: {MIN_TICK} (price {get_price_from_tick(MIN_TICK):.4f})\n'
+        f'  max tick: {MAX_TICK} (price {get_price_from_tick(MAX_TICK):.4f})\n'
         f'  eth to seed: {formatE18(provider.ETH_TO_SEED())}\n'
         f'  eth on the contract: {formatE18(provider.balance())}\n'
-        f'  position lower tick: {provider.POSITION_LOWER_TICK()}\n'
-        f'  position upper tick: {provider.POSITION_UPPER_TICK()}\n'
+        f'  position lower tick: {provider.POSITION_LOWER_TICK()} (price {get_price_from_tick(POSITION_LOWER_TICK):.4f})\n'
+        f'  position upper tick: {provider.POSITION_UPPER_TICK()} (price {get_price_from_tick(POSITION_UPPER_TICK):.4f})\n'
     )
 
     if not skip_confirmation:
