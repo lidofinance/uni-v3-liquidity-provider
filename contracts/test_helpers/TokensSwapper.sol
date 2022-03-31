@@ -52,10 +52,8 @@ contract TokensSwapper is IUniswapV3SwapCallback {
         WETH_TOKEN.deposit{value: amount}();
         require(WETH_TOKEN.balanceOf(address(this)) >= amount);
 
-        // WETH_TOKEN.approve(address(POOL), amount);
-
         (int256 amount0Delta, int256 amount1Delta) = POOL.swap(
-            address(this), // msg.sender,
+            address(this),
             zeroForOne,
             int256(amount),
             sqrtPriceLimitX96,
@@ -71,16 +69,14 @@ contract TokensSwapper is IUniswapV3SwapCallback {
         uint160 sqrtPriceLimitX96 = zeroForOne ? TickMath.MIN_SQRT_RATIO + 1 : TickMath.MAX_SQRT_RATIO - 1;
 
         uint256 wstethAmount = WSTETH_TOKEN.getWstETHByStETH(ethAmount);
-        // require(address(this).balance >= ethAmount, "NOT_ENOUGH_ETH_FOR_WSTETH");
 
         (bool success, ) = address(WSTETH_TOKEN).call{value: ethAmount}("");
         require(success, "WSTETH_MINTING_FAILED");
 
         (int256 amount0Delta, int256 amount1Delta) = POOL.swap(
-            address(this), // msg.sender,
+            address(this),
             zeroForOne,
             int256(wstethAmount),
-            // int256((amount * 1e18) / WSTETH_TOKEN.stEthPerToken()) - 100,
             sqrtPriceLimitX96,
             abi.encode(msg.sender)
         );

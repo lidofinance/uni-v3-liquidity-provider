@@ -17,10 +17,11 @@ MAX_TICK = 637 + 50
 
 # #####################################
 # Parameters used for TESTING
+# Might needed to be adjusted to match current pool state
 # #####################################
-
-# TODO: swap size for small tick deviation
-# TODO: swap size for large tick deviation
+SMALL_POSITIVE_TICK_DEVIATION_WETH_SWAP_AMOUNT = toE18(230)
+SMALL_NEGATIVE_TICK_DEVIATION_WSTETH_SWAP_ETH_AMOUNT = toE18(340)
+LARGE_TICK_DEVIATION_WETH_SWAP_AMOUNT = toE18(400)
 
 
 # Addesses used in testing

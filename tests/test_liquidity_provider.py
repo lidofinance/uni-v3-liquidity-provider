@@ -353,11 +353,7 @@ def test_ref_mint_happy_path(deployer, provider, pool, position_manager, steth_t
 def test_ref_mint_succeeds_if_small_negative_tick_deviation(deployer, provider, pool, position_manager, swapper):
     deployer.transfer(provider.address, ETH_TO_SEED)
 
-    eth_to_swap = toE18(340)
-
-    # Mar 27: swap 250 eth for wsteth; (desired/before/after): 627/632/603 (deviation from pool 29) FAILED Price slippage check
-    # Mar 27: swap 200 eth for wsteth; (desired/before/after): 627/632/615 (deviation from pool 17) FAILED Price slippage check
-    # Mar 27: swap 170 eth for wsteth; (desired/before/after): 627/632/620 (deviation from pool 12) PASSED
+    eth_to_swap = SMALL_NEGATIVE_TICK_DEVIATION_WSTETH_SWAP_ETH_AMOUNT
 
     tickBefore = provider.getCurrentPriceTick()
     swapper.swapWsteth({'from': deployer, 'value': eth_to_swap})
@@ -379,9 +375,7 @@ def test_ref_mint_succeeds_if_small_negative_tick_deviation(deployer, provider, 
 def test_ref_mint_succeeds_if_small_positive_tick_deviation(deployer, provider, pool, position_manager, swapper):
     deployer.transfer(provider.address, ETH_TO_SEED)
 
-    # 23 Mar: swap 260 weth; tick (desired/before/after): 627/629/668 (deviation 41) PASSED
-    # 23 Mar: swap 270 weth; tick (desired/before/after): 627/629/673 (deviation 46) FAILED Price slippage check
-    weth_to_swap = toE18(310)
+    weth_to_swap = SMALL_POSITIVE_TICK_DEVIATION_WETH_SWAP_AMOUNT
 
     tickBefore = provider.getCurrentPriceTick()
     swapper.swapWeth({'from': deployer, 'value': weth_to_swap})
@@ -405,7 +399,7 @@ def test_mint_fails_if_large_tick_deviation(deployer, provider, swapper):
 
     # amount of token needed to swap to move the price far enough
     # the value need to be adjusted accordingly to the current pool state
-    weth_to_swap = toE18(400)
+    weth_to_swap = LARGE_TICK_DEVIATION_WETH_SWAP_AMOUNT
 
     tickBefore = provider.getCurrentPriceTick();
     swapper.swapWeth({'from': deployer, 'value': weth_to_swap})
@@ -485,7 +479,9 @@ def test_get_amount_of_eth_for_wsteth(deployer, provider, wsteth_token):
     deployer.transfer(wsteth_token.address, eth)
     assert wsteth == wsteth_token.balanceOf(deployer)  # the 1 wei is taken into account inside of getAmountOfEthForWsteth 
 
+
 # TODO: test_close_liquidity_position unhappy path? priced moved out of the position? priced moved a lot?
+
 
 def test_close_liquidity_position(deployer, provider, position_manager, steth_token, wsteth_token, weth_token, lido_agent, swapper, helpers):
     deployer.transfer(provider.address, ETH_TO_SEED)

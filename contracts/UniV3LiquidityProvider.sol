@@ -8,7 +8,6 @@ import { TickMath } from "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import { TransferHelper } from "@uniswap/v3-core/contracts/libraries/TransferHelper.sol";
 import "@uniswap/v3-core/contracts/libraries/SqrtPriceMath.sol";
 import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
-// import "@uniswap/v3-core/contracts/libraries/FullMath.sol";
 
 import '@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol';
 
@@ -54,9 +53,9 @@ contract UniV3LiquidityProvider {
     int24 public constant POSITION_UPPER_TICK = 970; // spot price 1.1019
     bytes32 public immutable POSITION_ID;
 
-    /// Specifies an allowed range
-    int24 public MIN_ALLOWED_TICK;
-    int24 public MAX_ALLOWED_TICK;
+    /// Tick range which bounds tick range specified in mint()
+    int24 public immutable MIN_ALLOWED_TICK;
+    int24 public immutable MAX_ALLOWED_TICK;
 
     address public admin;
 
@@ -122,8 +121,8 @@ contract UniV3LiquidityProvider {
 
     /**
      * @param _ethAmount Amount of Ether on the contract used for providing liquidity
-     * @param _minAllowedTick TODO
-     * @param _maxAllowedTick TODO
+     * @param _minAllowedTick Min pool tick for which liquidity is allowed to be provided
+     * @param _maxAllowedTick Max pool tick for which liquidity is allowed to be provided
      */
     constructor(
         uint256 _ethAmount,
@@ -247,8 +246,8 @@ contract UniV3LiquidityProvider {
             INonfungiblePositionManager.CollectParams({
                 tokenId: liquidityPositionTokenId,
                 recipient: address(this),
-                amount0Max: type(uint128).max,  // narrowing conversion is OK: with 1e18 precision there is
-                amount1Max: type(uint128).max   // still enough space for any reasonable token amounts
+                amount0Max: type(uint128).max,
+                amount1Max: type(uint128).max
             })
         );
 
@@ -356,10 +355,6 @@ contract UniV3LiquidityProvider {
         //   weth = eth / (ratio * stEthPerToken + 1)
         //   wsteth = ratio * weth
 
-
-        // uint256 wstethPriceE27 = IWstETH(TOKEN0).stEthPerToken();
-        // uint256 wstethPriceE27 = IWstETH(TOKEN0).getStETHByWstETH(oneE27);
-
         uint256 oneE27 = 1e27;
         uint256 wstethPriceE27 = _getAmountOfEthForWsteth(oneE27);
 
@@ -392,12 +387,10 @@ contract UniV3LiquidityProvider {
             uint256 minWsteth,
             uint256 minWeth
     ) {
-        uint256 ethAmountToUse = ethAmount;
-
         int24 minTick = _minTick - 1;
         int24 maxTick = _maxTick + 1;
-        (uint256 wstethForMinTick, uint256 wethForMinTick) = _calcTokenAmounts(minTick, ethAmountToUse);
-        (uint256 wstethForMaxTick, uint256 wethForMaxTick) = _calcTokenAmounts(maxTick, ethAmountToUse);
+        (uint256 wstethForMinTick, uint256 wethForMinTick) = _calcTokenAmounts(minTick, ethAmount);
+        (uint256 wstethForMaxTick, uint256 wethForMaxTick) = _calcTokenAmounts(maxTick, ethAmount);
 
         minWsteth = wstethForMaxTick;
         minWeth = wethForMinTick;
@@ -422,14 +415,19 @@ contract UniV3LiquidityProvider {
     }
 
     function _refundLeftoversToLidoAgent() internal {
-        uint256 token0Balance = IERC20(TOKEN0).balanceOf(address(this));
-        if (token0Balance > 0) {
-            IWstETH(TOKEN0).unwrap(token0Balance);
+        uint256 token0Amount = IERC20(TOKEN0).balanceOf(address(this));
+        if (token0Amount > 0) {
+            IWstETH(TOKEN0).unwrap(token0Amount);
         }
 
         _refundERC20(STETH_TOKEN, IERC20(STETH_TOKEN).balanceOf(address(this)));
 
-        IWETH(TOKEN1).withdraw(IERC20(TOKEN1).balanceOf(address(this)));
+        uint256 token1Amount = IERC20(TOKEN1).balanceOf(address(this));
+        if (token1Amount > 0) {
+            IWETH(TOKEN1).withdraw(token1Amount);
+            emit ERC20Refunded(msg.sender, TOKEN1, token1Amount);
+        }
+
         _refundETH();
     }
 }

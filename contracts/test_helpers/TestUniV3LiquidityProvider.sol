@@ -62,17 +62,6 @@ contract TestUniV3LiquidityProvider is
         (amount0, amount1) = _calcTokenAmounts(_tick, _ethAmount);
     }
 
-    // function calcTokensRatioFromSqrtPrice(uint160 _sqrtPriceX96) external view
-    // {
-    //     return _calcTokensRatioFromSqrtPrice(_sqrtPriceX96);
-    // }
-
-    // function calcTokenAmountsFromRatio(uint256 _ratio, uint256 _ethAmount) external view
-    //     returns (uint256 amount0, uint256 amount1)
-    // {
-    //     return _calcTokenAmountsFromRatio(_ratio, _ethAmount);
-    // }
-
     function calcTokenAmountsFromCurrentPoolSqrtPrice(uint256 _ethAmount) external view
         returns (uint256 amount0, uint256 amount1)
     {
@@ -139,22 +128,9 @@ contract TestUniV3LiquidityProvider is
         int24 tickLower,
         int24 tickUpper
     ){
-        (
-            ,
-            ,
-            ,
-            ,
-            ,
-            tickLower,
-            tickUpper,
-            liquidity,
-            ,
-            ,
-            tokensOwed0,
-            tokensOwed1
-        ) = NONFUNGIBLE_POSITION_MANAGER.positions(_tokenId);
+        ( , , , , , tickLower, tickUpper, liquidity, , , tokensOwed0, tokensOwed1)
+            = NONFUNGIBLE_POSITION_MANAGER.positions(_tokenId);
     }
-
 
     // A wrapper around library function
     function getSqrtRatioAtTick(int24 _tick) external view returns (uint160) {
@@ -209,14 +185,12 @@ contract TestUniV3LiquidityProvider is
         uint256 balanceBefore = address(this).balance;
         _wrapEthToTokens(_amount0Owed, _amount1Owed);
 
-        // TODO: remove this debug require
         require(address(this).balance - (balanceBefore - ethAmount) < 10, "DEBUG_MOCK_TOO_MUCH_SPARE_ETH_LEFT");
 
         TransferHelper.safeTransfer(TOKEN0, address(POOL), _amount0Owed);
         TransferHelper.safeTransfer(TOKEN1, address(POOL), _amount1Owed);
     }
     
-
     /**
      * @dev We expect it not to be executed as Uniswap-v3 doesn't use safeTransferFrom
      * Will revert if called to alert.
@@ -236,9 +210,9 @@ contract TestUniV3LiquidityProvider is
         return this.onERC721Received.selector;
     }
 
-
     function _getChainlinkFeedLatestRoundDataPrice() internal view virtual returns (int256) {
-        ( , int256 price, , uint256 timeStamp, ) = ChainlinkAggregatorV3Interface(CHAINLINK_STETH_ETH_PRICE_FEED).latestRoundData();
+        ( , int256 price, , uint256 timeStamp, ) = 
+            ChainlinkAggregatorV3Interface(CHAINLINK_STETH_ETH_PRICE_FEED).latestRoundData();
         assert(timeStamp != 0);
         return price;
     }

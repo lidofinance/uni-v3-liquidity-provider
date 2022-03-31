@@ -35,8 +35,6 @@ def main(deployer=None, skip_confirmation=False):
         {'from': deployer}
     )
 
-    # TODO: Show parameters of event LiquidityParametersUpdated
-    
     write_deploy_address(provider.address)
 
     assert read_deploy_address() == provider.address
