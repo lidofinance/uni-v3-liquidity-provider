@@ -22,8 +22,10 @@ def main(deployer=None, skip_confirmation=False):
         f'Going to provide liquidity to Uni-v3 pool with the following parameters:\n'
         f'  min tick: {MIN_TICK}\n'
         f'  max tick: {MAX_TICK}\n'
-        f'  eth to seed: {formatE18(provider.ethAmount())}\n'
+        f'  eth to seed: {formatE18(provider.ETH_TO_SEED())}\n'
         f'  eth on the contract: {formatE18(provider.balance())}\n'
+        f'  position lower tick: {provider.POSITION_LOWER_TICK()}\n'
+        f'  position upper tick: {provider.POSITION_UPPER_TICK()}\n'
     )
 
     if not skip_confirmation:

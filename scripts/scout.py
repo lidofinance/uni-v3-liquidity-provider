@@ -88,7 +88,7 @@ def calc_seeding_params(eth_amount, liquidity):
 
 
 def print_amounts_calculated_by_pool():
-    wsteth_amount, weth_amount = calc_token_amounts(ETH_TO_SEED - provider.ETH_AMOUNT_MARGIN())
+    wsteth_amount, weth_amount = calc_token_amounts(ETH_TO_SEED)
 
     eth_used = wsteth_amount * wsteth_token.stEthPerToken() / 1e18  + weth_amount
 

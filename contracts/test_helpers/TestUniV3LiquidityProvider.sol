@@ -38,10 +38,14 @@ contract TestUniV3LiquidityProvider is
 
     constructor(
         uint256 _ethAmount,
+        int24 _positionLowerTick,
+        int24 _positionUpperTick,
         int24 _minAllowedTick,
         int24 _maxAllowedTick
     ) UniV3LiquidityProvider(
         _ethAmount,
+        _positionLowerTick,
+        _positionUpperTick,
         _minAllowedTick,
         _maxAllowedTick
     ) {
@@ -185,7 +189,7 @@ contract TestUniV3LiquidityProvider is
         uint256 balanceBefore = address(this).balance;
         _wrapEthToTokens(_amount0Owed, _amount1Owed);
 
-        require(address(this).balance - (balanceBefore - ethAmount) < 10, "DEBUG_MOCK_TOO_MUCH_SPARE_ETH_LEFT");
+        require(address(this).balance - (balanceBefore - ETH_TO_SEED) < 10, "DEBUG_MOCK_TOO_MUCH_SPARE_ETH_LEFT");
 
         TransferHelper.safeTransfer(TOKEN0, address(POOL), _amount0Owed);
         TransferHelper.safeTransfer(TOKEN1, address(POOL), _amount1Owed);

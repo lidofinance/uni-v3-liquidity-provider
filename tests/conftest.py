@@ -44,6 +44,8 @@ def lido_agent():
 def provider(deployer, TestUniV3LiquidityProvider):
     return TestUniV3LiquidityProvider.deploy(
         ETH_TO_SEED,
+        POSITION_LOWER_TICK,
+        POSITION_UPPER_TICK,
         MIN_ALLOWED_TICK,
         MAX_ALLOWED_TICK,
         {'from': deployer})

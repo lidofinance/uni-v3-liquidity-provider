@@ -49,8 +49,8 @@ contract UniV3LiquidityProvider {
     address public constant STETH_TOKEN = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
     address public constant LIDO_AGENT = 0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c;
 
-    int24 public constant POSITION_LOWER_TICK = -1630; // spot price 0.8496
-    int24 public constant POSITION_UPPER_TICK = 970; // spot price 1.1019
+    int24 public immutable POSITION_LOWER_TICK;
+    int24 public immutable POSITION_UPPER_TICK;
     bytes32 public immutable POSITION_ID;
 
     /// Tick range which bounds tick range specified in mint()
@@ -60,10 +60,7 @@ contract UniV3LiquidityProvider {
     address public admin;
 
     /// Amount of ETH to use to provide liquidity
-    uint256 public ethAmount;
-
-    /// The pool price tick we'd like not to be moved too far away from
-    int24 public desiredTick;
+    uint256 public immutable ETH_TO_SEED;
 
     /// Amount of liquidity provided for the position created in mint() function
     uint128 public liquidityProvided;
@@ -126,18 +123,23 @@ contract UniV3LiquidityProvider {
      */
     constructor(
         uint256 _ethAmount,
+        int24 _positionLowerTick,
+        int24 _positionUpperTick,
         int24 _minAllowedTick,
         int24 _maxAllowedTick
     ) {
-        require(_minAllowedTick <= _maxAllowedTick);
-        require(_minAllowedTick >= POSITION_LOWER_TICK);
-        require(_maxAllowedTick <= POSITION_UPPER_TICK);
+        require(_positionLowerTick < _positionUpperTick);
+        require(_minAllowedTick < _maxAllowedTick);
+        require(_minAllowedTick >= _positionLowerTick);
+        require(_maxAllowedTick <= _positionUpperTick);
 
         admin = msg.sender;
 
-        POSITION_ID = keccak256(abi.encodePacked(address(this), POSITION_LOWER_TICK, POSITION_UPPER_TICK));
+        ETH_TO_SEED = _ethAmount;
 
-        ethAmount = _ethAmount;
+        POSITION_LOWER_TICK = _positionLowerTick;
+        POSITION_UPPER_TICK = _positionUpperTick;
+        POSITION_ID = keccak256(abi.encodePacked(address(this), _positionLowerTick, _positionUpperTick));
 
         MIN_ALLOWED_TICK = _minAllowedTick;
         MAX_ALLOWED_TICK = _maxAllowedTick;
@@ -175,7 +177,7 @@ contract UniV3LiquidityProvider {
         (, int24 tick, , , , , ) = POOL.slot0();
         require(_minTick <= tick && tick <= _maxTick, "TICK_DEVIATION_TOO_BIG_AT_START");
 
-        (uint256 desWsteth, uint256 desWeth) = _calcTokenAmountsFromCurrentPoolSqrtPrice(ethAmount);
+        (uint256 desWsteth, uint256 desWeth) = _calcTokenAmountsFromCurrentPoolSqrtPrice(ETH_TO_SEED);
 
         _wrapEthToTokens(desWsteth, desWeth);
 
@@ -389,8 +391,8 @@ contract UniV3LiquidityProvider {
     ) {
         int24 minTick = _minTick - 1;
         int24 maxTick = _maxTick + 1;
-        (uint256 wstethForMinTick, uint256 wethForMinTick) = _calcTokenAmounts(minTick, ethAmount);
-        (uint256 wstethForMaxTick, uint256 wethForMaxTick) = _calcTokenAmounts(maxTick, ethAmount);
+        (uint256 wstethForMinTick, uint256 wethForMinTick) = _calcTokenAmounts(minTick, ETH_TO_SEED);
+        (uint256 wstethForMaxTick, uint256 wethForMaxTick) = _calcTokenAmounts(maxTick, ETH_TO_SEED);
 
         minWsteth = wstethForMaxTick;
         minWeth = wethForMinTick;

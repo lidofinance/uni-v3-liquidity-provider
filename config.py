@@ -4,6 +4,8 @@ from scripts.utils import *
 # Parameters used for contract deployment
 # #######################################
 ETH_TO_SEED = toE18(600)
+POSITION_LOWER_TICK = -1630  # spot price 0.8496
+POSITION_UPPER_TICK = 970  # spot price 1.1019
 MIN_ALLOWED_TICK = 637 - 100
 MAX_ALLOWED_TICK = 637 + 100
 
