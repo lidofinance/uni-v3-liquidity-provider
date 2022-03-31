@@ -140,7 +140,7 @@ contract UniV3LiquidityProvider {
 
         POSITION_LOWER_TICK = _positionLowerTick;
         POSITION_UPPER_TICK = _positionUpperTick;
-        POSITION_ID = keccak256(abi.encodePacked(address(this), _positionLowerTick, _positionUpperTick));
+        POSITION_ID = keccak256(abi.encodePacked(address(NONFUNGIBLE_POSITION_MANAGER), _positionLowerTick, _positionUpperTick));
 
         MIN_ALLOWED_TICK = _minAllowedTick;
         MAX_ALLOWED_TICK = _maxAllowedTick;
@@ -227,6 +227,7 @@ contract UniV3LiquidityProvider {
         uint256 amount0Fees,
         uint256 amount1Fees
     ) {
+        // TODO: Do we need closeLiquidityPosition at all?
         // TODO: maybe adjust amount{0,1}Min for slippage protection
         //       is sandwich scary? is anything else is scarry?
 

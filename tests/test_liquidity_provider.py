@@ -17,12 +17,16 @@ sys.path.append(
 from config import *
 
 
-def assert_liquidity_provided(provider, pool, position_manager, token_id):
+def assert_liquidity_provided(provider, pool, position_manager, token_id, expected_liquidity, tick_liquidity_before):
     assert position_manager.ownerOf(token_id) == LIDO_AGENT
 
-    # TODO: calc approx (or exact) liquidity threshold
-    assert 0 < get_tick_positions_liquidity(pool, provider.POSITION_LOWER_TICK())
-    assert 0 < get_tick_positions_liquidity(pool, provider.POSITION_UPPER_TICK())
+    position_liquidity, _, _, tokensOwed0, tokensOwed1 = pool.positions(provider.POSITION_ID())
+    current_tick_liquidity = pool.liquidity()
+
+    assert tokensOwed0 == 0
+    assert tokensOwed1 == 0
+    assert current_tick_liquidity == tick_liquidity_before + expected_liquidity
+    assert position_liquidity == expected_liquidity
 
 
 class assert_leftovers_refunded():
@@ -89,14 +93,15 @@ def test_deploy_script_and_mint_script(deployer, UniV3LiquidityProvider, pool, p
     contract_address = read_deploy_address()
     provider = UniV3LiquidityProvider.at(contract_address)
     assert provider.admin() == deployer
+    tick_liquidity_before = pool.liquidity()
 
     assert_contract_params_after_deployment(provider)
 
     deployer.transfer(provider.address, ETH_TO_SEED)
     tx = scripts.mint.main(deployer, skip_confirmation=True)
-    token_id, _, _, _ = tx.return_value
+    token_id, liquidity, _, _ = tx.return_value
 
-    assert_liquidity_provided(provider, pool, position_manager, token_id)
+    assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before)
 
 
 def test_eth_received(deployer, provider, helpers):
@@ -340,6 +345,8 @@ def test_mint_happy_path(deployer, provider, pool, position_manager, steth_token
     assert 0 == get_tick_positions_liquidity(pool, provider.POSITION_LOWER_TICK())
     assert 0 == get_tick_positions_liquidity(pool, provider.POSITION_UPPER_TICK())
 
+    tick_liquidity_before = pool.liquidity()
+
     with assert_leftovers_refunded(provider, steth_token, wsteth_token,
                                    weth_token, lido_agent, need_check_agent_balance=False):
         tx = provider.mint(MIN_TICK, MAX_TICK)
@@ -353,7 +360,7 @@ def test_mint_happy_path(deployer, provider, pool, position_manager, steth_token
             'wethAmount': amount1,
         })
 
-    assert_liquidity_provided(provider, pool, position_manager, token_id)
+    assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before)
 
 def test_mint_succeeds_if_small_negative_tick_deviation(deployer, provider, pool, position_manager, swapper):
     deployer.transfer(provider.address, ETH_TO_SEED)
@@ -363,6 +370,7 @@ def test_mint_succeeds_if_small_negative_tick_deviation(deployer, provider, pool
     tickBefore = provider.getCurrentPriceTick()
     swapper.swapWsteth({'from': deployer, 'value': eth_to_swap})
     tickAfter = provider.getCurrentPriceTick()
+    tick_liquidity_before = pool.liquidity()
 
     print(f'tick (before/after): {tickBefore}/{tickAfter}')
     print(f'tick deviation from pool current: {abs(tickAfter - tickBefore)}')
@@ -370,10 +378,10 @@ def test_mint_succeeds_if_small_negative_tick_deviation(deployer, provider, pool
     assert MIN_TICK <= tickAfter <= MAX_TICK
 
     tx = provider.mint(MIN_TICK, MAX_TICK)
-    token_id, _, _, _ = tx.return_value
+    token_id, liquidity, _, _ = tx.return_value
     print_mint_return_value(tx.return_value)
 
-    assert_liquidity_provided(provider, pool, position_manager, token_id)
+    assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before)
 
 
 def test_mint_succeeds_if_small_positive_tick_deviation(deployer, provider, pool, position_manager, swapper):
@@ -384,6 +392,7 @@ def test_mint_succeeds_if_small_positive_tick_deviation(deployer, provider, pool
     tickBefore = provider.getCurrentPriceTick()
     swapper.swapWeth({'from': deployer, 'value': weth_to_swap})
     tickAfter = provider.getCurrentPriceTick()
+    tick_liquidity_before = pool.liquidity()
 
     print(f'tick (before/after): {tickBefore}/{tickAfter}')
     print(f'tick deviation from pool current: {abs(tickAfter - tickBefore)}')
@@ -391,10 +400,10 @@ def test_mint_succeeds_if_small_positive_tick_deviation(deployer, provider, pool
     assert MIN_TICK <= tickAfter <= MAX_TICK
 
     tx = provider.mint(MIN_TICK, MAX_TICK)
-    token_id, _, _, _ = tx.return_value
+    token_id, liquidity, _, _ = tx.return_value
     print_mint_return_value(tx.return_value)
 
-    assert_liquidity_provided(provider, pool, position_manager, token_id)
+    assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before)
 
 
 def test_mint_fails_if_large_tick_deviation(deployer, provider, swapper):
@@ -483,9 +492,6 @@ def test_get_amount_of_eth_for_wsteth(deployer, provider, wsteth_token):
     assert wsteth == wsteth_token.balanceOf(deployer)  # the 1 wei is taken into account inside of getAmountOfEthForWsteth 
 
 
-# TODO: test_close_liquidity_position unhappy path? priced moved out of the position? priced moved a lot?
-
-
 def test_close_liquidity_position(deployer, provider, position_manager, steth_token, wsteth_token, weth_token, lido_agent, swapper, helpers):
     deployer.transfer(provider.address, ETH_TO_SEED)
 
@@ -506,11 +512,15 @@ def test_close_liquidity_position(deployer, provider, position_manager, steth_to
     assert position_manager.ownerOf(token_id) == provider
 
     # swap a bit to have non-zero fees
-    # TODO: Why swapping increases eth_lost?
     # swapper.swapWeth({'from': deployer, 'value': toE18(0.1)})
+    # swapper.swapWeth({'from': deployer, 'value': toE18(83)})
+    # TODO: Why large swap increases eth lost? How much is acceptable/expected?
+    # TODO: Why colletion of fees collected unexpectedly change eth_lost?
+    # TODO: Do we need closeLiquidityPosition unhappy path? priced moved out of the position? priced moved a lot?
 
     tx = provider.closeLiquidityPosition()
     wsteth_returned, weth_returned, wsteth_fees, weth_fees = tx.return_value
+    fees_in_eth = weth_fees + wsteth_token.getStETHByWstETH(wsteth_fees)
 
     helpers.assert_single_event_named('LiquidityRetracted', tx, evt_keys_dict={
         'wstethAmount': wsteth_returned,
@@ -534,6 +544,7 @@ def test_close_liquidity_position(deployer, provider, position_manager, steth_to
         f'  weth = {formatE18(weth_returned)}\n'
         f'  wsteth fees = {formatE18(wsteth_fees)}\n'
         f'  weth fees = {formatE18(weth_fees)}\n'
+        f'  fees in eth = {formatE18(fees_in_eth)}\n'
     )
 
     assert provider.balance() == 0
@@ -543,7 +554,7 @@ def test_close_liquidity_position(deployer, provider, position_manager, steth_to
 
     eth_lost = ETH_TO_SEED - (
         lido_agent.balance() - agent_eth_before + steth_token.balanceOf(LIDO_AGENT) - agent_steth_before
-    )
+    ) + fees_in_eth
     print(f'eth_lost = {formatE18(eth_lost)} ({(100 * eth_lost / ETH_TO_SEED):.2f}%)')
 
     assert eth_lost < 10  # 10 wei
