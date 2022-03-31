@@ -29,29 +29,37 @@ def assert_liquidity_provided(provider, pool, position_manager, token_id, expect
     assert position_liquidity == expected_liquidity
 
 
-class assert_leftovers_refunded():
-    def __init__(self, provider, steth_token, wsteth_token, weth_token, lido_agent, need_check_agent_balance):
+class leftovers_refund_checker():
+    """Check provider and agent states before and after refunding and/or minting"""
+    def __init__(self, provider, steth_token, wsteth_token, weth_token, lido_agent, helpers):
         self.provider = provider
         self.steth_token = steth_token
         self.wsteth_token = wsteth_token
         self.weth_token = weth_token
         self.lido_agent = lido_agent
-        self.need_check_agent_balance = need_check_agent_balance
+        self.helpers = helpers
 
-    def __enter__(self):
         self.agent_eth_before = self.lido_agent.balance()
         self.agent_steth_before = self.steth_token.balanceOf(self.lido_agent.address)
         self.eth_leftover = self.provider.balance()
         self.weth_leftover = self.weth_token.balanceOf(self.provider.address)
         self.wsteth_leftover = self.wsteth_token.balanceOf(self.provider.address)
 
-    def __exit__(self, *args):
+    def check(self, tx, need_check_agent_balance=False):
         assert self.provider.balance() == 0
         assert self.weth_token.balanceOf(self.provider.address) == 0
         assert self.steth_token.balanceOf(self.provider.address) <= 1
         assert self.wsteth_token.balanceOf(self.provider.address) == 0
 
-        if self.need_check_agent_balance:
+        token_id, liquidity, amount0, amount1 = tx.return_value
+        self.helpers.assert_single_event_named('LiquidityProvided', tx, evt_keys_dict={
+            'tokenId': token_id,
+            'liquidity': liquidity,
+            'wstethAmount': amount0,
+            'wethAmount': amount1,
+        })
+
+        if need_check_agent_balance:
             assert self.lido_agent.balance() - self.agent_eth_before \
                 == self.eth_leftover + self.weth_leftover
 
@@ -347,20 +355,16 @@ def test_mint_happy_path(deployer, provider, pool, position_manager, steth_token
 
     tick_liquidity_before = pool.liquidity()
 
-    with assert_leftovers_refunded(provider, steth_token, wsteth_token,
-                                   weth_token, lido_agent, need_check_agent_balance=False):
-        tx = provider.mint(MIN_TICK, MAX_TICK)
-        print_mint_return_value(tx.return_value)
-        token_id, liquidity, amount0, amount1 = tx.return_value
+    leftovers_checker = leftovers_refund_checker(
+        provider, steth_token, wsteth_token, weth_token, lido_agent, helpers)
 
-        helpers.assert_single_event_named('LiquidityProvided', tx, evt_keys_dict={
-            'tokenId': token_id,
-            'liquidity': liquidity,
-            'wstethAmount': amount0,
-            'wethAmount': amount1,
-        })
+    tx = provider.mint(MIN_TICK, MAX_TICK)
+    print_mint_return_value(tx.return_value)
+    token_id, liquidity, _, _ = tx.return_value
+    leftovers_checker.check(tx, need_check_agent_balance=False)
 
     assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before)
+
 
 def test_mint_succeeds_if_small_negative_tick_deviation(deployer, provider, pool, position_manager, swapper):
     deployer.transfer(provider.address, ETH_TO_SEED)
