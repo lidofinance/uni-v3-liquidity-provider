@@ -83,15 +83,6 @@ contract UniV3LiquidityProvider {
         uint256 wethAmount
     );
 
-    /// Emitted when liquidity position closed and fees collected
-    /// to the Lido treasure address by `requestedBy` sender.
-    event LiquidityRetracted(
-        uint256 wstethAmount,
-        uint256 wethAmount,
-        uint256 wstethFeesCollected,
-        uint256 wethFeesCollected
-    );
-
     /// Emitted when ETH is refunded to Lido agent contract
     event EthRefunded(
         address requestedBy,
@@ -219,51 +210,6 @@ contract UniV3LiquidityProvider {
         emit LiquidityProvided(tokenId, liquidity, amount0, amount1);
 
         _refundLeftoversToLidoAgent();
-    }
-
-    function closeLiquidityPosition() external authAdminOrDao() returns (
-        uint256 amount0,
-        uint256 amount1,
-        uint256 amount0Fees,
-        uint256 amount1Fees
-    ) {
-        // TODO: Do we need closeLiquidityPosition at all?
-        // TODO: maybe adjust amount{0,1}Min for slippage protection
-        //       is sandwich scary? is anything else is scarry?
-
-        // amount0Min and amount1Min are price slippage checks
-        // if the amount received after burning is not greater than these minimums, transaction will fail
-        INonfungiblePositionManager.DecreaseLiquidityParams memory params =
-            INonfungiblePositionManager.DecreaseLiquidityParams({
-                tokenId: liquidityPositionTokenId,
-                liquidity: liquidityProvided,
-                amount0Min: 0,
-                amount1Min: 0,
-                deadline: block.timestamp
-            });
-
-        (amount0, amount1) = NONFUNGIBLE_POSITION_MANAGER.decreaseLiquidity(params);
-        require(amount0 > 0, "AMOUNT0_IS_ZERO");
-        require(amount1 > 0, "AMOUNT1_IS_ZERO");
-
-        (uint256 amount0Collected, uint256 amount1Collected) = NONFUNGIBLE_POSITION_MANAGER.collect(
-            INonfungiblePositionManager.CollectParams({
-                tokenId: liquidityPositionTokenId,
-                recipient: address(this),
-                amount0Max: type(uint128).max,
-                amount1Max: type(uint128).max
-            })
-        );
-
-        amount0Fees = amount0Collected - amount0;
-        amount1Fees = amount1Collected - amount1;
-
-        emit LiquidityRetracted(amount0, amount1, amount0Fees, amount1Fees);
-
-        _refundLeftoversToLidoAgent();
-
-        NONFUNGIBLE_POSITION_MANAGER.burn(liquidityPositionTokenId);
-        liquidityPositionTokenId = 0;
     }
 
     function refundETH() external authAdminOrDao() {

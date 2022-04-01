@@ -221,14 +221,6 @@ def test_only_admin_or_dao_can_refund(deployer, provider):
         provider.refundETH({'from': accounts[1]})
 
 
-def test_only_admin_or_dao_can_close_position(deployer, provider):
-    with reverts('AUTH_ADMIN_OR_LIDO_AGENT'):
-        provider.closeLiquidityPosition({'from': POOL})
-
-    with reverts('AUTH_ADMIN_OR_LIDO_AGENT'):
-        provider.closeLiquidityPosition({'from': accounts[1]})
-
-
 def test_set_admin(deployer, provider, helpers):
     assert provider.admin() == deployer
 
@@ -494,74 +486,3 @@ def test_get_amount_of_eth_for_wsteth(deployer, provider, wsteth_token):
     eth = provider.getAmountOfEthForWsteth(wsteth)
     deployer.transfer(wsteth_token.address, eth)
     assert wsteth == wsteth_token.balanceOf(deployer)  # the 1 wei is taken into account inside of getAmountOfEthForWsteth 
-
-
-def test_close_liquidity_position(deployer, provider, position_manager, steth_token, wsteth_token, weth_token, lido_agent, swapper, helpers):
-    deployer.transfer(provider.address, ETH_TO_SEED)
-
-    agent_steth_before = steth_token.balanceOf(LIDO_AGENT)
-    agent_eth_before = lido_agent.balance()
-
-    tx = provider.mint(MIN_TICK, MAX_TICK)
-    token_id, _, wsteth_provided, weth_provided = tx.return_value
-    print(
-        f'liquidity provided:\n'
-        f'  wsteth={formatE18(wsteth_provided)}\n'
-        f'  weth={formatE18(weth_provided)}\n'
-    )
-
-    assert position_manager.ownerOf(token_id) == LIDO_AGENT
-
-    position_manager.transferFrom(LIDO_AGENT, provider, token_id, {'from': LIDO_AGENT})
-    assert position_manager.ownerOf(token_id) == provider
-
-    # swap a bit to have non-zero fees
-    # swapper.swapWeth({'from': deployer, 'value': toE18(0.1)})
-    # swapper.swapWeth({'from': deployer, 'value': toE18(83)})
-    # TODO: Why large swap increases eth lost? How much is acceptable/expected?
-    # TODO: Why colletion of fees collected unexpectedly change eth_lost?
-    # TODO: Do we need closeLiquidityPosition unhappy path? priced moved out of the position? priced moved a lot?
-
-    tx = provider.closeLiquidityPosition()
-    wsteth_returned, weth_returned, wsteth_fees, weth_fees = tx.return_value
-    fees_in_eth = weth_fees + wsteth_token.getStETHByWstETH(wsteth_fees)
-
-    helpers.assert_single_event_named('LiquidityRetracted', tx, evt_keys_dict={
-        'wstethAmount': wsteth_returned,
-        'wethAmount': weth_returned,
-        'wstethFeesCollected': wsteth_fees,
-        'wethFeesCollected': weth_fees,
-    })
-
-    assert wsteth_fees == 0  # we've done no wstEth swaps thus no wsteth fees
-    # assert weth_fees > 0
-
-    # print(
-    #     f'contract balances:\n'
-    #     f'  wsteth={formatE18(wsteth_token.balanceOf(provider.address))}\n'
-    #     f'  weth={formatE18(weth_token.balanceOf(provider.address))}\n'
-    # )
-
-    print(
-        f'position liquidity withdrawn:\n'
-        f'  wsteth = {formatE18(wsteth_returned)}\n'
-        f'  weth = {formatE18(weth_returned)}\n'
-        f'  wsteth fees = {formatE18(wsteth_fees)}\n'
-        f'  weth fees = {formatE18(weth_fees)}\n'
-        f'  fees in eth = {formatE18(fees_in_eth)}\n'
-    )
-
-    assert provider.balance() == 0
-    assert weth_token.balanceOf(provider.address) == 0
-    assert steth_token.balanceOf(provider.address) <= 1
-    assert wsteth_token.balanceOf(provider.address) == 0
-
-    eth_lost = ETH_TO_SEED - (
-        lido_agent.balance() - agent_eth_before + steth_token.balanceOf(LIDO_AGENT) - agent_steth_before
-    ) + fees_in_eth
-    print(f'eth_lost = {formatE18(eth_lost)} ({(100 * eth_lost / ETH_TO_SEED):.2f}%)')
-
-    assert eth_lost < 10  # 10 wei
-
-    with reverts('ERC721: owner query for nonexistent token'):
-        position_manager.ownerOf(token_id)
