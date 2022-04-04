@@ -49,6 +49,8 @@ contract UniV3LiquidityProvider {
     address public constant STETH_TOKEN = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
     address public constant LIDO_AGENT = 0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c;
 
+    uint256 public constant ONE_E27 = 1e27;
+
     int24 public immutable POSITION_LOWER_TICK;
     int24 public immutable POSITION_UPPER_TICK;
     bytes32 public immutable POSITION_ID;
@@ -277,6 +279,14 @@ contract UniV3LiquidityProvider {
         wstEthOverWEthRatioE27 = uint256((amount0E27 * 1e27) / amount1E27);
     }
 
+    function _mulE27(uint256 _a, uint256 _b) internal pure returns (uint256) {
+        return (_a * _b) / ONE_E27;
+    }
+
+    function _divE27(uint256 _nominator, uint256 _denominator) internal pure returns (uint256) {
+        return (_nominator * ONE_E27) / _denominator;
+    }
+
     /**
      * Calc token amounts from wsteth/weth ratio
      *
@@ -296,15 +306,13 @@ contract UniV3LiquidityProvider {
         //   weth = eth / (ratio * stEthPerToken + 1)
         //   wsteth = ratio * weth
 
-        uint256 oneE27 = 1e27;
-        uint256 wstethPriceE27 = _getAmountOfEthForWsteth(oneE27);
+        uint256 wstethPriceE27 = _getAmountOfEthForWsteth(ONE_E27);
 
-        uint256 denominatorE27 = oneE27 + (_ratioE27 * wstethPriceE27) / oneE27;
+        uint256 denominatorE27 = ONE_E27 + _mulE27(_ratioE27, wstethPriceE27);
 
-        uint256 amount1E27 = (_ethAmount * 1e9 * oneE27) / denominatorE27;
+        uint256 amount1E27 = _divE27(_ethAmount * 1e9, denominatorE27);
 
-        amount0 = (amount1E27 * _ratioE27) / (oneE27 * 1e9);
-
+        amount0 = _mulE27(amount1E27, _ratioE27) / 1e9;
         amount1 = amount1E27 / 1e9;
     }
 
