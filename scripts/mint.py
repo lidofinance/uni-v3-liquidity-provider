@@ -10,7 +10,7 @@ from config import *
 from .utils import *
 
 
-def main(execute_tx, deployer_account=None, skip_confirmation=False):
+def main(execute_tx, deployer_account=None, priority_fee='2 wei', max_fee='300 gwei', skip_confirmation=False):
     """there are 3 ways to interpret deployer_account value
         - test environment
             - None: use dev deployer address
@@ -52,7 +52,19 @@ def main(execute_tx, deployer_account=None, skip_confirmation=False):
             sys.exit(1)
 
     if execute_tx:
-        tx_params = {'from': deployer_address}
+        tx_params = { 'from': deployer_address, "priority_fee": priority_fee, "max_fee": max_fee }
+
+        if not skip_confirmation:
+            reply = input('Are these transaction parameters correct? (yes/no)\n')
+            print(
+                f'  priority_fee: {tx_params["priority_fee"]}\n'
+                f'  max_fee: {tx_params["max_fee"]}\n'
+                f'  from: {tx_params["deployer_address"]}\n'
+            )
+            if reply != 'yes':
+                print("Operator hasn't approved correctness of the parameters. Deployment stopped.")
+                sys.exit(1)
+
         tx = provider.mint(MIN_TICK, MAX_TICK, tx_params)
         token_id, liquidity, wsteth_amount, weth_amount = tx.return_value
 

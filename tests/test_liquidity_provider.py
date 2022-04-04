@@ -101,6 +101,7 @@ def test_deploy_script_and_mint_script(deployer, UniV3LiquidityProvider, pool, p
     assert_contract_params_after_deployment(provider)
 
     deployer.transfer(provider.address, ETH_TO_SEED)
+    deployer.transfer(DEV_MULTISIG, toE18(1))
     tx = scripts.mint.main(deployer_account=DEV_MULTISIG, skip_confirmation=True, execute_tx=True)
     token_id, liquidity, _, _ = tx.return_value
 

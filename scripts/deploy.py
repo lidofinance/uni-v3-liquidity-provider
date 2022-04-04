@@ -9,7 +9,7 @@ from config import *
 from .utils import *
 
 
-def main(deployer_account=None, is_test_environment=False):
+def main(deployer_account=None, priority_fee='2 wei', max_fee='300 gwei', is_test_environment=False):
     if get_is_live() is None:
         assert deployer_account is not None, 'Please set deployer deployer as the first arg of the script (see brownie run -h)'
 
@@ -35,7 +35,19 @@ def main(deployer_account=None, is_test_environment=False):
             print("Operator hasn't approved correctness of the parameters. Deployment stopped.")
             sys.exit(1)
 
-    tx_params = {'from': deployer_address, "priority_fee": "2 gwei", "max_fee": "300 gwei" }
+    tx_params = { 'from': deployer_address, "priority_fee": priority_fee, "max_fee": max_fee }
+    if not is_test_environment:
+        reply = input('Are these transaction parameters correct? (yes/no)\n')
+        print(
+            f'  priority_fee: {tx_params["priority_fee"]}\n'
+            f'  max_fee: {tx_params["max_fee"]}\n'
+            f'  from: {tx_params["deployer_address"]}\n'
+        )
+        if reply != 'yes':
+            print("Operator hasn't approved correctness of the parameters. Deployment stopped.")
+            sys.exit(1)
+
+
     provider = UniV3LiquidityProvider.deploy(
         ETH_TO_SEED,
         POSITION_LOWER_TICK,
