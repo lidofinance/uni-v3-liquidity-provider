@@ -11,12 +11,9 @@ from .utils import *
 
 
 def main(execute_tx, deployer_account=None, priority_fee='2 wei', max_fee='300 gwei', skip_confirmation=False):
-    """there are 3 ways to interpret deployer_account value
-        - test environment
-            - None: use dev deployer address
-        - live environment:
-            - brownie account name: use the account
-            - None: save tx call data for use in multisig
+    """`deployer_account` in live environment can either be:
+        - brownie account name: use the account
+        - None: save tx calldata for use in multisig
     """
     if not skip_confirmation:
         assert not get_is_live()
@@ -59,11 +56,12 @@ def main(execute_tx, deployer_account=None, priority_fee='2 wei', max_fee='300 g
             print(
                 f'  priority_fee: {tx_params["priority_fee"]}\n'
                 f'  max_fee: {tx_params["max_fee"]}\n'
-                f'  from: {tx_params["deployer_address"]}\n'
+                f'  from: {tx_params["from"]}\n'
             )
             if reply != 'yes':
                 print("Operator hasn't approved correctness of the parameters. Deployment stopped.")
                 sys.exit(1)
+            print()
 
         tx = provider.mint(MIN_TICK, MAX_TICK, tx_params)
         token_id, liquidity, wsteth_amount, weth_amount = tx.return_value
@@ -79,7 +77,6 @@ def main(execute_tx, deployer_account=None, priority_fee='2 wei', max_fee='300 g
         return tx
     else:
         calldata_path = get_mint_calldata_path()
-        # calldata = provider.mint.encode_input(MIN_TICK, MAX_TICK, tx_params)
         calldata = provider.mint.encode_input(MIN_TICK, MAX_TICK)
         with open(calldata_path, 'w') as fp:
             fp.write(calldata)

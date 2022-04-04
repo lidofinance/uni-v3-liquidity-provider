@@ -16,7 +16,7 @@ def main(deployer_account=None, priority_fee='2 wei', max_fee='300 gwei', is_tes
     if deployer_account is None:
         deployer_address = get_dev_deployer_address()
     else:
-        deployer_address, = accounts.load(deployer_account)
+        deployer_address = accounts.load(deployer_account)
     
     print(f'DEPLOYER is {deployer_address}')
 
@@ -37,16 +37,16 @@ def main(deployer_account=None, priority_fee='2 wei', max_fee='300 gwei', is_tes
 
     tx_params = { 'from': deployer_address, "priority_fee": priority_fee, "max_fee": max_fee }
     if not is_test_environment:
-        reply = input('Are these transaction parameters correct? (yes/no)\n')
         print(
             f'  priority_fee: {tx_params["priority_fee"]}\n'
             f'  max_fee: {tx_params["max_fee"]}\n'
-            f'  from: {tx_params["deployer_address"]}\n'
+            f'  from: {tx_params["from"]}\n'
         )
+        reply = input('Are these transaction parameters correct? (yes/no)\n')
         if reply != 'yes':
             print("Operator hasn't approved correctness of the parameters. Deployment stopped.")
             sys.exit(1)
-
+        print()
 
     provider = UniV3LiquidityProvider.deploy(
         ETH_TO_SEED,

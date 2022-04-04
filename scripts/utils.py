@@ -82,3 +82,56 @@ def get_is_live():
         "goerli-fork"
     ]
     return network.show_active() not in dev_networks
+
+
+def assert_liquidity_provided(provider, pool, position_manager, token_id, expected_liquidity, tick_liquidity_before):
+    assert position_manager.ownerOf(token_id) == LIDO_AGENT
+
+    position_liquidity, _, _, tokensOwed0, tokensOwed1 = pool.positions(provider.POSITION_ID())
+    current_tick_liquidity = pool.liquidity()
+
+    assert tokensOwed0 == 0
+    assert tokensOwed1 == 0
+    assert current_tick_liquidity == tick_liquidity_before + expected_liquidity
+    assert position_liquidity == expected_liquidity
+
+
+class leftovers_refund_checker():
+    """Check provider and agent states before and after refunding and/or minting"""
+    def __init__(self, provider, steth_token, wsteth_token, weth_token, lido_agent, helpers):
+        self.provider = provider
+        self.steth_token = steth_token
+        self.wsteth_token = wsteth_token
+        self.weth_token = weth_token
+        self.lido_agent = lido_agent
+        self.helpers = helpers
+
+        self.agent_eth_before = self.lido_agent.balance()
+        self.agent_steth_before = self.steth_token.balanceOf(self.lido_agent.address)
+        self.eth_leftover = self.provider.balance()
+        self.weth_leftover = self.weth_token.balanceOf(self.provider.address)
+        self.wsteth_leftover = self.wsteth_token.balanceOf(self.provider.address)
+
+    def check(self, tx, need_check_agent_balance=False):
+        assert self.provider.balance() == 0
+        assert self.weth_token.balanceOf(self.provider.address) == 0
+        assert self.steth_token.balanceOf(self.provider.address) <= 1
+        assert self.wsteth_token.balanceOf(self.provider.address) == 0
+
+        token_id, liquidity, amount0, amount1 = tx.return_value
+        self.helpers.assert_single_event_named('LiquidityProvided', tx, evt_keys_dict={
+            'tokenId': token_id,
+            'liquidity': liquidity,
+            'wstethAmount': amount0,
+            'wethAmount': amount1,
+        })
+
+        if need_check_agent_balance:
+            assert self.lido_agent.balance() - self.agent_eth_before \
+                == self.eth_leftover + self.weth_leftover
+
+            assert deviation_percent(
+                self.steth_token.balanceOf(self.lido_agent.address) - self.agent_steth_before,
+                self.wsteth_leftover * self.wsteth_token.stEthPerToken() / 1e18
+            ) < 0.001  # 0.001%
+

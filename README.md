@@ -59,7 +59,7 @@ Script `scripts/deploy.py` deploys the contract and sets multisig address as con
     brownie run scripts/deploy.py main <brownie account id> --network <target network>
 
 ## Acceptance test
-Is run automatically in `scripts/deploy.py` after the deployment, but also can be run separately by
+Is supposed to be run right after the deployment.
 
     TODO (run on fork)
 
