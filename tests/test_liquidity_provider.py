@@ -1,6 +1,4 @@
-from eth_account import Account
-import pytest
-from brownie import accounts, reverts, network
+from brownie import accounts, reverts
 
 import sys
 import os
@@ -12,58 +10,6 @@ import scripts.mint
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
 from config import *
-
-
-def assert_liquidity_provided(provider, pool, position_manager, token_id, expected_liquidity, tick_liquidity_before):
-    assert position_manager.ownerOf(token_id) == LIDO_AGENT
-
-    position_liquidity, _, _, tokensOwed0, tokensOwed1 = pool.positions(provider.POSITION_ID())
-    current_tick_liquidity = pool.liquidity()
-
-    assert tokensOwed0 == 0
-    assert tokensOwed1 == 0
-    assert current_tick_liquidity == tick_liquidity_before + expected_liquidity
-    assert position_liquidity == expected_liquidity
-
-
-class leftovers_refund_checker():
-    """Check provider and agent states before and after refunding and/or minting"""
-    def __init__(self, provider, steth_token, wsteth_token, weth_token, lido_agent, helpers):
-        self.provider = provider
-        self.steth_token = steth_token
-        self.wsteth_token = wsteth_token
-        self.weth_token = weth_token
-        self.lido_agent = lido_agent
-        self.helpers = helpers
-
-        self.agent_eth_before = self.lido_agent.balance()
-        self.agent_steth_before = self.steth_token.balanceOf(self.lido_agent.address)
-        self.eth_leftover = self.provider.balance()
-        self.weth_leftover = self.weth_token.balanceOf(self.provider.address)
-        self.wsteth_leftover = self.wsteth_token.balanceOf(self.provider.address)
-
-    def check(self, tx, need_check_agent_balance=False):
-        assert self.provider.balance() == 0
-        assert self.weth_token.balanceOf(self.provider.address) == 0
-        assert self.steth_token.balanceOf(self.provider.address) <= 1
-        assert self.wsteth_token.balanceOf(self.provider.address) == 0
-
-        token_id, liquidity, amount0, amount1 = tx.return_value
-        self.helpers.assert_single_event_named('LiquidityProvided', tx, evt_keys_dict={
-            'tokenId': token_id,
-            'liquidity': liquidity,
-            'wstethAmount': amount0,
-            'wethAmount': amount1,
-        })
-
-        if need_check_agent_balance:
-            assert self.lido_agent.balance() - self.agent_eth_before \
-                == self.eth_leftover + self.weth_leftover
-
-            assert deviation_percent(
-                self.steth_token.balanceOf(self.lido_agent.address) - self.agent_steth_before,
-                self.wsteth_leftover * self.wsteth_token.stEthPerToken() / 1e18
-            ) < 0.001  # 0.001%
 
 
 def assert_contract_params_after_deployment(provider):
@@ -91,7 +37,7 @@ def test_deploy_script(UniV3LiquidityProvider):
     os.remove(get_deploy_address_path())
 
 
-def test_deploy_script_and_mint_script(deployer, UniV3LiquidityProvider, pool, position_manager):
+def test_deploy_script_and_mint_script(deployer, UniV3LiquidityProvider, pool, position_manager, lido_agent):
     scripts.deploy.main(None, is_test_environment=True)
     contract_address = read_deploy_address()
     provider = UniV3LiquidityProvider.at(contract_address)
@@ -105,12 +51,12 @@ def test_deploy_script_and_mint_script(deployer, UniV3LiquidityProvider, pool, p
     tx = scripts.mint.main(deployer_account=DEV_MULTISIG, skip_confirmation=True, execute_tx=True)
     token_id, liquidity, _, _ = tx.return_value
 
-    assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before)
+    assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before, lido_agent)
 
     os.remove(get_deploy_address_path())
 
 
-def test_mint_script_calldata(deployer, UniV3LiquidityProvider, pool, position_manager):
+def test_mint_script_calldata(deployer, UniV3LiquidityProvider, pool, position_manager, lido_agent):
     scripts.deploy.main(None, is_test_environment=True)
     contract_address = read_deploy_address()
     provider = UniV3LiquidityProvider.at(contract_address)
@@ -132,7 +78,7 @@ def test_mint_script_calldata(deployer, UniV3LiquidityProvider, pool, position_m
 
     token_id, liquidity, _, _ = tx.return_value
 
-    assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before)
+    assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before, lido_agent)
 
     os.remove(get_deploy_address_path())
     os.remove(calldata_path)
@@ -381,10 +327,10 @@ def test_mint_happy_path(deployer, provider, pool, position_manager, steth_token
     token_id, liquidity, _, _ = tx.return_value
     leftovers_checker.check(tx, need_check_agent_balance=False)
 
-    assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before)
+    assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before, lido_agent)
 
 
-def test_mint_succeeds_if_small_negative_tick_deviation(deployer, provider, pool, position_manager, swapper):
+def test_mint_succeeds_if_small_negative_tick_deviation(deployer, provider, pool, position_manager, swapper, lido_agent):
     deployer.transfer(provider.address, ETH_TO_SEED)
 
     eth_to_swap = SMALL_NEGATIVE_TICK_DEVIATION_WSTETH_SWAP_ETH_AMOUNT
@@ -403,10 +349,10 @@ def test_mint_succeeds_if_small_negative_tick_deviation(deployer, provider, pool
     token_id, liquidity, _, _ = tx.return_value
     print_mint_return_value(tx.return_value)
 
-    assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before)
+    assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before, lido_agent)
 
 
-def test_mint_succeeds_if_small_positive_tick_deviation(deployer, provider, pool, position_manager, swapper):
+def test_mint_succeeds_if_small_positive_tick_deviation(deployer, provider, pool, position_manager, swapper, lido_agent):
     deployer.transfer(provider.address, ETH_TO_SEED)
 
     weth_to_swap = SMALL_POSITIVE_TICK_DEVIATION_WETH_SWAP_AMOUNT
@@ -425,7 +371,7 @@ def test_mint_succeeds_if_small_positive_tick_deviation(deployer, provider, pool
     token_id, liquidity, _, _ = tx.return_value
     print_mint_return_value(tx.return_value)
 
-    assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before)
+    assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before, lido_agent)
 
 
 def test_mint_fails_if_large_tick_deviation(deployer, provider, swapper):

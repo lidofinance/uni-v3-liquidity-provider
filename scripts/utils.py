@@ -84,8 +84,8 @@ def get_is_live():
     return network.show_active() not in dev_networks
 
 
-def assert_liquidity_provided(provider, pool, position_manager, token_id, expected_liquidity, tick_liquidity_before):
-    assert position_manager.ownerOf(token_id) == LIDO_AGENT
+def assert_liquidity_provided(provider, pool, position_manager, token_id, expected_liquidity, tick_liquidity_before, lido_agent):
+    assert position_manager.ownerOf(token_id) == lido_agent.address
 
     position_liquidity, _, _, tokensOwed0, tokensOwed1 = pool.positions(provider.POSITION_ID())
     current_tick_liquidity = pool.liquidity()
