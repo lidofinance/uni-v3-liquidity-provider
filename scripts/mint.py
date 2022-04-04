@@ -1,3 +1,4 @@
+from unittest import skip
 from brownie import *
 from pprint import pprint
 
@@ -9,11 +10,27 @@ from config import *
 from .utils import *
 
 
-def main(deployer=None, is_test_environment=False):
-    if deployer is None:
-        deployer = accounts[0]  # for dev environment
+def main(execute_tx, deployer_account=None, skip_confirmation=False):
+    """there are 3 ways to interpret deployer_account value
+        - test environment
+            - None: use dev deployer address
+        - live environment:
+            - brownie account name: use the account
+            - None: save tx call data for use in multisig
+    """
+    if not skip_confirmation:
+        assert not get_is_live()
     
-    print(f'DEPLOYER is {deployer}')
+    if execute_tx:
+        if skip_confirmation:
+            deployer_address = deployer_account
+        else:
+            assert deployer_account is not None
+            deployer_address, = accounts.load(deployer_account)
+    else:
+        deployer_address = None
+
+    print(f'DEPLOYER is {deployer_address}')
     
     provider_address = read_deploy_address()
     provider = UniV3LiquidityProvider.at(provider_address)
@@ -28,22 +45,35 @@ def main(deployer=None, is_test_environment=False):
         f'  position upper tick: {provider.POSITION_UPPER_TICK()} (price {get_price_from_tick(POSITION_UPPER_TICK):.4f})\n'
     )
 
-    if not is_test_environment:
+    if not skip_confirmation:
         reply = input('Is this correct? (yes/no)\n')
         if reply != 'yes':
             print("Operator hasn't approved correctness of the parameters. Deployment stopped.")
             sys.exit(1)
 
-    tx = provider.mint(MIN_TICK, MAX_TICK, {'from': deployer})
-    token_id, liquidity, wsteth_amount, weth_amount = tx.return_value
+    if execute_tx:
+        tx_params = {'from': deployer_address}
+        tx = provider.mint(MIN_TICK, MAX_TICK, tx_params)
+        token_id, liquidity, wsteth_amount, weth_amount = tx.return_value
 
-    print(
-        f'Liquidity provided:\n'
-        f'  position token is: {token_id}\n'
-        f'  amount of liquidity: {liquidity}\n'
-        f'  wsteth amount: {formatE18(wsteth_amount)}\n'
-        f'  weth amount: {formatE18(weth_amount)}\n'
-    )
+        print(
+            f'Liquidity provided:\n'
+            f'  position token is: {token_id}\n'
+            f'  amount of liquidity: {liquidity}\n'
+            f'  wsteth amount: {formatE18(wsteth_amount)}\n'
+            f'  weth amount: {formatE18(weth_amount)}\n'
+        )
 
-    return tx
+        return tx
+    else:
+        calldata_path = get_mint_calldata_path()
+        # calldata = provider.mint.encode_input(MIN_TICK, MAX_TICK, tx_params)
+        calldata = provider.mint.encode_input(MIN_TICK, MAX_TICK)
+        with open(calldata_path, 'w') as fp:
+            fp.write(calldata)
+        print(f'Transaction calldata is written to {calldata_path}')
+
+        return calldata_path
+
+
     

@@ -55,6 +55,13 @@ def get_deploy_address_path():
         f'deploy-{network_name}-address.txt'
     )
 
+def get_mint_calldata_path():
+    network_name = network.show_active()
+    return os.path.join(
+        os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)),
+        f'mint-{network_name}-calldata.txt'
+    )
+
 def write_deploy_address(address):
     with open(get_deploy_address_path(), 'w') as fp:
         fp.write(address)

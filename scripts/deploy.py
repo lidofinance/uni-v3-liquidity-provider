@@ -16,7 +16,7 @@ def main(deployer_account=None, is_test_environment=False):
     if deployer_account is None:
         deployer_address = get_dev_deployer_address()
     else:
-        accounts.load(deployer_account)
+        deployer_address, = accounts.load(deployer_account)
     
     print(f'DEPLOYER is {deployer_address}')
 

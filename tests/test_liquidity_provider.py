@@ -101,12 +101,40 @@ def test_deploy_script_and_mint_script(deployer, UniV3LiquidityProvider, pool, p
     assert_contract_params_after_deployment(provider)
 
     deployer.transfer(provider.address, ETH_TO_SEED)
-    tx = scripts.mint.main(DEV_MULTISIG, is_test_environment=True)
+    tx = scripts.mint.main(deployer_account=DEV_MULTISIG, skip_confirmation=True, execute_tx=True)
     token_id, liquidity, _, _ = tx.return_value
 
     assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before)
 
     os.remove(get_deploy_address_path())
+
+
+def test_mint_script_calldata(deployer, UniV3LiquidityProvider, pool, position_manager):
+    scripts.deploy.main(None, is_test_environment=True)
+    contract_address = read_deploy_address()
+    provider = UniV3LiquidityProvider.at(contract_address)
+    assert provider.admin() == DEV_MULTISIG
+    tick_liquidity_before = pool.liquidity()
+
+    assert_contract_params_after_deployment(provider)
+
+    deployer.transfer(provider.address, ETH_TO_SEED)
+
+    calldata_path = scripts.mint.main(deployer_account=None, skip_confirmation=True, execute_tx=False)
+
+    with open(calldata_path, 'r') as fp:
+        calldata = fp.read()
+
+    args = provider.mint.decode_input(calldata)
+    print('Mint args: ' + str(args))
+    tx = provider.mint.call(*args, {'from': DEV_MULTISIG})
+
+    token_id, liquidity, _, _ = tx.return_value
+
+    assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before)
+
+    os.remove(get_deploy_address_path())
+    os.remove(calldata_path)
 
 
 def test_eth_received(deployer, provider, helpers):
