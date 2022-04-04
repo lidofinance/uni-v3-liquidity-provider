@@ -63,12 +63,6 @@ contract UniV3LiquidityProvider {
     /// Contract admin
     address public admin;
 
-    /// Amount of liquidity provided for the position created in mint() function
-    uint128 public liquidityProvided;
-
-    /// NTF id of the liquidity position minted
-    uint256 public liquidityPositionTokenId;
-
     /// Emitted when ETH is received by the contract
     event EthReceived(
         uint256 amount
@@ -201,9 +195,6 @@ contract UniV3LiquidityProvider {
         (, tick, , , , , ) = POOL.slot0();
         require(_minTick <= tick && tick <= _maxTick, "TICK_DEVIATION_TOO_BIG_AFTER_MINT");
 
-        liquidityProvided = liquidity;
-        liquidityPositionTokenId = tokenId;
-        
         IERC20(TOKEN0).approve(address(NONFUNGIBLE_POSITION_MANAGER), 0);
         IERC20(TOKEN1).approve(address(NONFUNGIBLE_POSITION_MANAGER), 0);
 
@@ -375,7 +366,6 @@ contract UniV3LiquidityProvider {
         uint256 token1Amount = IERC20(TOKEN1).balanceOf(address(this));
         if (token1Amount > 0) {
             IWETH(TOKEN1).withdraw(token1Amount);
-            emit ERC20Refunded(msg.sender, TOKEN1, token1Amount);
         }
 
         _refundETH();

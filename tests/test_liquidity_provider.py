@@ -1,12 +1,9 @@
-from contextlib import AsyncExitStack
-from mimetypes import init
-from pprint import pprint
 from eth_account import Account
 import pytest
-from brownie import Contract, accounts, ZERO_ADDRESS, chain, reverts, ETH_ADDRESS
+from brownie import accounts, reverts, network
 
 import sys
-import os.path
+import os
 
 from scripts.utils import *
 import scripts.deploy
@@ -83,33 +80,33 @@ def assert_contract_params_after_deployment(provider):
     assert ETH_TO_SEED == provider.ETH_TO_SEED()
 
 
-def test_addresses(provider):
-    assert_contract_params_after_deployment(provider)
-
-
-def test_deploy_script(deployer, UniV3LiquidityProvider):
-    scripts.deploy.main(deployer, skip_confirmation=True)
+def test_deploy_script(UniV3LiquidityProvider):
+    scripts.deploy.main(None, is_test_environment=True)
     contract_address = read_deploy_address()
     provider = UniV3LiquidityProvider.at(contract_address)
-    assert provider.admin() == deployer
+    assert provider.admin() == DEV_MULTISIG
 
     assert_contract_params_after_deployment(provider)
+
+    os.remove(get_deploy_address_path())
 
 
 def test_deploy_script_and_mint_script(deployer, UniV3LiquidityProvider, pool, position_manager):
-    scripts.deploy.main(deployer, skip_confirmation=True)
+    scripts.deploy.main(None, is_test_environment=True)
     contract_address = read_deploy_address()
     provider = UniV3LiquidityProvider.at(contract_address)
-    assert provider.admin() == deployer
+    assert provider.admin() == DEV_MULTISIG
     tick_liquidity_before = pool.liquidity()
 
     assert_contract_params_after_deployment(provider)
 
     deployer.transfer(provider.address, ETH_TO_SEED)
-    tx = scripts.mint.main(deployer, skip_confirmation=True)
+    tx = scripts.mint.main(DEV_MULTISIG, is_test_environment=True)
     token_id, liquidity, _, _ = tx.return_value
 
     assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before)
+
+    os.remove(get_deploy_address_path())
 
 
 def test_eth_received(deployer, provider, helpers):

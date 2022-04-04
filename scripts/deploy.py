@@ -9,11 +9,16 @@ from config import *
 from .utils import *
 
 
-def main(deployer=None, skip_confirmation=False):
-    if deployer is None:
-        deployer = accounts[0]  # for dev environment
+def main(deployer_account=None, is_test_environment=False):
+    if get_is_live() is None:
+        assert deployer_account is not None, 'Please set deployer deployer as the first arg of the script (see brownie run -h)'
+
+    if deployer_account is None:
+        deployer_address = get_dev_deployer_address()
+    else:
+        accounts.load(deployer_account)
     
-    print(f'DEPLOYER is {deployer}')
+    print(f'DEPLOYER is {deployer_address}')
 
     print(
         f'Going to deploy with the following parameters:\n'
@@ -24,21 +29,25 @@ def main(deployer=None, skip_confirmation=False):
         f'  MAX_ALLOWED_TICK: {MAX_ALLOWED_TICK} (price {get_price_from_tick(MAX_ALLOWED_TICK):.4f})\n'
     )
 
-    if not skip_confirmation:
+    if not is_test_environment:
         reply = input('Are they correct? (yes/no)\n')
         if reply != 'yes':
             print("Operator hasn't approved correctness of the parameters. Deployment stopped.")
             sys.exit(1)
 
+    tx_params = {'from': deployer_address, "priority_fee": "2 gwei", "max_fee": "300 gwei" }
     provider = UniV3LiquidityProvider.deploy(
         ETH_TO_SEED,
         POSITION_LOWER_TICK,
         POSITION_UPPER_TICK,
         MIN_ALLOWED_TICK,
         MAX_ALLOWED_TICK,
-        {'from': deployer}
+        tx_params,
+        publish_source=not is_test_environment
     )
 
     write_deploy_address(provider.address)
+
+    provider.setAdmin(DEV_MULTISIG, tx_params)
 
     assert read_deploy_address() == provider.address

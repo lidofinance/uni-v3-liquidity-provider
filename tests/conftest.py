@@ -13,8 +13,8 @@ def shared_setup(fn_isolation):
     pass
 
 @pytest.fixture(scope='module')
-def deployer(accounts):
-    return accounts[0]
+def deployer():
+    return get_dev_deployer_address()
 
 @pytest.fixture(scope='module')
 def steth_token(interface):
@@ -37,8 +37,8 @@ def position_manager(interface):
     return interface.INonfungiblePositionManager(NONFUNGIBLE_POSITION_MANAGER)
 
 @pytest.fixture(scope='module')
-def lido_agent():
-    return Contract.from_abi("Foo", LIDO_AGENT, "")
+def lido_agent(accounts):
+    return accounts.at(LIDO_AGENT, force=True)
 
 @pytest.fixture(scope='function')
 def provider(deployer, TestUniV3LiquidityProvider):

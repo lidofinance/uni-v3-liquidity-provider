@@ -17,7 +17,8 @@ networks:
       default_balance: 10000000
       evm_version: istanbul
       mnemonic: 'rib diamond horse main tenant habit nothing fish alarm budget age comic filter execute used'
-      fork: your-rpc-url-infura-or-alchemy-for-instance
+      # fork: mainnet
+      fork: https://eth-mainnet.alchemyapi.io/v2/0dQtSg0BT-uVEs2nqzN3rqxZ9sQ_SSGA
 
 compiler:
     evm_version: null

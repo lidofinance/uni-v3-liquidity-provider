@@ -9,7 +9,7 @@ from config import *
 from .utils import *
 
 
-def main(deployer=None, skip_confirmation=False):
+def main(deployer=None, is_test_environment=False):
     if deployer is None:
         deployer = accounts[0]  # for dev environment
     
@@ -28,13 +28,13 @@ def main(deployer=None, skip_confirmation=False):
         f'  position upper tick: {provider.POSITION_UPPER_TICK()} (price {get_price_from_tick(POSITION_UPPER_TICK):.4f})\n'
     )
 
-    if not skip_confirmation:
+    if not is_test_environment:
         reply = input('Is this correct? (yes/no)\n')
         if reply != 'yes':
             print("Operator hasn't approved correctness of the parameters. Deployment stopped.")
             sys.exit(1)
 
-    tx = provider.mint(MIN_TICK, MAX_TICK)
+    tx = provider.mint(MIN_TICK, MAX_TICK, {'from': deployer})
     token_id, liquidity, wsteth_amount, weth_amount = tx.return_value
 
     print(

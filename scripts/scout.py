@@ -17,6 +17,8 @@ weth_token = interface.WSTETH(WETH_TOKEN)
 
 provider = TestUniV3LiquidityProvider.deploy(
     ETH_TO_SEED,
+    POSITION_LOWER_TICK,
+    POSITION_UPPER_TICK,
     MIN_ALLOWED_TICK,
     MAX_ALLOWED_TICK,
     {'from': deployer})
@@ -35,7 +37,7 @@ def print_stats():
         f'  current pool tick = {provider.getCurrentPriceTick()}\n'
         f'  current pool price = {formatE18(provider.getSpotPrice())}\n'
         f'  chainlink-based wsteth price = {formatE18(provider.getChainlinkBasedWstethPrice())}\n'
-        f'  pool price abs deviation from chainlink price = {diff_from_chainlink:.2}%\n'
+        f'  pool price abs deviation from chainlink-based price = {diff_from_chainlink:.2}%\n'
     )
 
     # TODO: ? print some info about existing positions

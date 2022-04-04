@@ -1,4 +1,4 @@
-from brownie import Contract, interface
+from brownie import Contract, network, accounts
 from math import floor, sqrt, log
 from pprint import pprint
 import os
@@ -49,9 +49,10 @@ def print_mint_return_value(mint_return_value):
     })
 
 def get_deploy_address_path():
+    network_name = network.show_active()
     return os.path.join(
         os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)),
-        'deploy-address.txt'
+        f'deploy-{network_name}-address.txt'
     )
 
 def write_deploy_address(address):
@@ -61,3 +62,16 @@ def write_deploy_address(address):
 def read_deploy_address():
     with open(get_deploy_address_path(), 'r') as fp:
         return fp.read()
+
+def get_dev_deployer_address():
+    return accounts[0]
+
+def get_is_live():
+    dev_networks = [
+        "development",
+        "hardhat",
+        "hardhat-fork",
+        "mainnet-fork",
+        "goerli-fork"
+    ]
+    return network.show_active() not in dev_networks
