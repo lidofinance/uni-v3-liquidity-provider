@@ -24,8 +24,8 @@ In happy path scenario there is a single function which is supposed to be called
     function mint(int24 _minTick, int24 _maxTick) external authAdminOrDao() returns (
         uint256 tokenId,
         uint128 liquidity,
-        uint256 amount0,
-        uint256 amount1);
+        uint256 wstethAmount,
+        uint256 wethAmount);
 
 **NB**: Seeding liquidity is called "minting" throughout the README because the liquidity is provided by means of UniV3 NonfungiblePositionManager which mints NFT to the position owner.
 

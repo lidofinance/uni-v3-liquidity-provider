@@ -60,13 +60,13 @@ contract TestUniV3LiquidityProvider is
     }
 
     function calcTokenAmounts(int24 _tick, uint256 _ethAmount) external view
-        returns (uint256 amount0, uint256 amount1)
+        returns (uint256 wstethAmount, uint256 wethAmount)
     {
-        (amount0, amount1) = _calcTokenAmounts(_tick, _ethAmount);
+        (wstethAmount, wethAmount) = _calcTokenAmounts(_tick, _ethAmount);
     }
 
     function calcTokenAmountsFromCurrentPoolSqrtPrice(uint256 _ethAmount) external view
-        returns (uint256 amount0, uint256 amount1)
+        returns (uint256 wstethAmount, uint256 wethAmount)
     {
         return _calcTokenAmountsFromCurrentPoolSqrtPrice(_ethAmount);
     }
@@ -120,8 +120,8 @@ contract TestUniV3LiquidityProvider is
         _refundLeftoversToLidoAgent();
     }
 
-    function wrapEthToTokens(uint256 _amount0, uint256 _amount1) external {
-        _wrapEthToTokens(_amount0, _amount1);
+    function wrapEthToTokens(uint256 _wstethAmount, uint256 _wethAmount) external {
+        _wrapEthToTokens(_wstethAmount, _wethAmount);
     }
 
     function getPositionInfo(uint256 _tokenId) external view returns (
@@ -146,7 +146,7 @@ contract TestUniV3LiquidityProvider is
     }
 
     // A wrapper around library function for current pool state
-    function getLiquidityForAmounts(uint256 amount0, uint256 amount1) external view returns (uint128 liquidity)
+    function getLiquidityForAmounts(uint256 wstethAmount, uint256 wethAmount) external view returns (uint128 liquidity)
     {
         (uint160 sqrtPriceX96, , , , , , ) = POOL.slot0();
         uint160 sqrtRatioAX96 = TickMath.getSqrtRatioAtTick(POSITION_LOWER_TICK);
@@ -156,8 +156,8 @@ contract TestUniV3LiquidityProvider is
             sqrtPriceX96,
             sqrtRatioAX96,
             sqrtRatioBX96,
-            amount0,
-            amount1
+            wstethAmount,
+            wethAmount
         ); 
     }
 
@@ -190,8 +190,8 @@ contract TestUniV3LiquidityProvider is
 
         require(address(this).balance - (balanceBefore - ETH_TO_SEED) < 10, "DEBUG_MOCK_TOO_MUCH_SPARE_ETH_LEFT");
 
-        TransferHelper.safeTransfer(TOKEN0, address(POOL), _amount0Owed);
-        TransferHelper.safeTransfer(TOKEN1, address(POOL), _amount1Owed);
+        TransferHelper.safeTransfer(WSTETH_TOKEN, address(POOL), _amount0Owed);
+        TransferHelper.safeTransfer(WETH_TOKEN, address(POOL), _amount1Owed);
     }
     
     /**
@@ -227,7 +227,7 @@ contract TestUniV3LiquidityProvider is
         int price = _getChainlinkFeedLatestRoundDataPrice();
 
         uint256 ethPerSteth = uint256(price) * 10**(18 - priceDecimals);
-        uint256 stethPerWsteth = IWstETH(TOKEN0).stEthPerToken();
+        uint256 stethPerWsteth = IWstETH(WSTETH_TOKEN).stEthPerToken();
         return (ethPerSteth * stethPerWsteth) / 1e18;
     }
 

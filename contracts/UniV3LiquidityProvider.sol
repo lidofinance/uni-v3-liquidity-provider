@@ -44,8 +44,9 @@ contract UniV3LiquidityProvider {
     INonfungiblePositionManager public constant NONFUNGIBLE_POSITION_MANAGER =
         INonfungiblePositionManager(0xC36442b4a4522E871399CD717aBDD847Ab11FE88);
 
-    address public constant TOKEN0 = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0; // wstETH
-    address public constant TOKEN1 = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH
+    address public constant WSTETH_TOKEN = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0; // wstETH
+    address public constant WETH_TOKEN = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH
+
     address public constant STETH_TOKEN = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
     address public constant LIDO_AGENT = 0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c;
 
@@ -156,8 +157,8 @@ contract UniV3LiquidityProvider {
     function mint(int24 _minTick, int24 _maxTick) external authAdminOrDao() returns (
         uint256 tokenId,
         uint128 liquidity,
-        uint256 amount0,
-        uint256 amount1
+        uint256 wstethAmount,
+        uint256 wethAmount
     ) {
         require(_minTick >= MIN_ALLOWED_TICK && _maxTick <= MAX_ALLOWED_TICK,
             'DESIRED_MIN_OR_MAX_TICK_IS_OUT_OF_ALLOWED_RANGE');
@@ -171,13 +172,13 @@ contract UniV3LiquidityProvider {
 
         (uint256 minWsteth, uint256 minWeth) = _calcMinTokenAmounts(_minTick, _maxTick);
 
-        IERC20(TOKEN0).approve(address(NONFUNGIBLE_POSITION_MANAGER), desWsteth);
-        IERC20(TOKEN1).approve(address(NONFUNGIBLE_POSITION_MANAGER), desWeth);
+        IERC20(WSTETH_TOKEN).approve(address(NONFUNGIBLE_POSITION_MANAGER), desWsteth);
+        IERC20(WETH_TOKEN).approve(address(NONFUNGIBLE_POSITION_MANAGER), desWeth);
 
         INonfungiblePositionManager.MintParams memory params =
             INonfungiblePositionManager.MintParams({
-                token0: TOKEN0,
-                token1: TOKEN1,
+                token0: WSTETH_TOKEN,
+                token1: WETH_TOKEN,
                 fee: POOL.fee(),
                 tickLower: POSITION_LOWER_TICK,
                 tickUpper: POSITION_UPPER_TICK,
@@ -188,19 +189,19 @@ contract UniV3LiquidityProvider {
                 recipient: LIDO_AGENT,
                 deadline: block.timestamp
             });
-        (tokenId, liquidity, amount0, amount1) = NONFUNGIBLE_POSITION_MANAGER.mint(params);
+        (tokenId, liquidity, wstethAmount, wethAmount) = NONFUNGIBLE_POSITION_MANAGER.mint(params);
 
         require(LIDO_AGENT == NONFUNGIBLE_POSITION_MANAGER.ownerOf(tokenId));
-        require(amount0 >= minWsteth, "AMOUNT0_TOO_LITTLE");
-        require(amount1 >= minWeth, "AMOUNT1_TOO_LITTLE");
+        require(wstethAmount >= minWsteth, "WSTETH_AMOUNT_TOO_LITTLE");
+        require(wethAmount >= minWeth, "WETH_AMOUNT_TOO_LITTLE");
 
         (, tick, , , , , ) = POOL.slot0();
         require(_minTick <= tick && tick <= _maxTick, "TICK_DEVIATION_TOO_BIG_AFTER_MINT");
 
-        IERC20(TOKEN0).approve(address(NONFUNGIBLE_POSITION_MANAGER), 0);
-        IERC20(TOKEN1).approve(address(NONFUNGIBLE_POSITION_MANAGER), 0);
+        IERC20(WSTETH_TOKEN).approve(address(NONFUNGIBLE_POSITION_MANAGER), 0);
+        IERC20(WETH_TOKEN).approve(address(NONFUNGIBLE_POSITION_MANAGER), 0);
 
-        emit LiquidityProvided(tokenId, liquidity, amount0, amount1);
+        emit LiquidityProvided(tokenId, liquidity, wstethAmount, wethAmount);
 
         _refundLeftoversToLidoAgent();
     }
@@ -263,20 +264,20 @@ contract UniV3LiquidityProvider {
         // But the amount must be large enough to provide sufficient precision
         int128 liquidity = 1e27;  
 
-        int256 amount0E27 = SqrtPriceMath.getAmount0Delta(
+        int256 wstethAmountE27 = SqrtPriceMath.getAmount0Delta(
             _sqrtPriceX96,
             TickMath.getSqrtRatioAtTick(POSITION_UPPER_TICK),
             liquidity
         );
-        int256 amount1E27 = SqrtPriceMath.getAmount1Delta(
+        int256 wethAmountE27 = SqrtPriceMath.getAmount1Delta(
             TickMath.getSqrtRatioAtTick(POSITION_LOWER_TICK),
             _sqrtPriceX96,
             liquidity
         );
-        require(amount0E27 > 0);
-        require(amount1E27 > 0);
+        require(wstethAmountE27 > 0);
+        require(wethAmountE27 > 0);
 
-        wstEthOverWEthRatioE27 = uint256((amount0E27 * 1e27) / amount1E27);
+        wstEthOverWEthRatioE27 = uint256((wstethAmountE27 * 1e27) / wethAmountE27);
     }
 
     function _mulE27(uint256 _a, uint256 _b) internal pure returns (uint256) {
@@ -292,11 +293,11 @@ contract UniV3LiquidityProvider {
      *
      * @param _ratioE27 wsteth/weth target ratio with e27 precision
      * @param _ethAmount eth amount to use
-     * @return amount0 Amounts of wsteth
-     * @return amount1 Amount of weth
+     * @return wstethAmount Amounts of wsteth
+     * @return wethAmount Amount of weth
      */
     function _calcTokenAmountsFromRatio(uint256 _ratioE27, uint256 _ethAmount) internal view
-        returns (uint256 amount0, uint256 amount1)
+        returns (uint256 wstethAmount, uint256 wethAmount)
     {
         // The system from which the formulas derived:
         //   ratio = wsteth / weth
@@ -310,14 +311,14 @@ contract UniV3LiquidityProvider {
 
         uint256 denominatorE27 = ONE_E27 + _mulE27(_ratioE27, wstethPriceE27);
 
-        uint256 amount1E27 = _divE27(_ethAmount * 1e9, denominatorE27);
+        uint256 wethAmountE27 = _divE27(_ethAmount * 1e9, denominatorE27);
 
-        amount0 = _mulE27(amount1E27, _ratioE27) / 1e9;
-        amount1 = amount1E27 / 1e9;
+        wstethAmount = _mulE27(wethAmountE27, _ratioE27) / 1e9;
+        wethAmount = wethAmountE27 / 1e9;
     }
 
     function _calcTokenAmountsFromCurrentPoolSqrtPrice(uint256 _ethAmount) internal view
-        returns (uint256 amount0, uint256 amount1)
+        returns (uint256 wstethAmount, uint256 wethAmount)
     {
         (uint160 sqrtRatioX96, , , , , , ) = POOL.slot0(); 
         uint256 ratio = _calcTokensRatioFromSqrtPrice(sqrtRatioX96);
@@ -325,7 +326,7 @@ contract UniV3LiquidityProvider {
     }
 
     function _calcTokenAmounts(int24 _tick, uint256 _ethAmount) internal view
-        returns (uint256 amount0, uint256 amount1)
+        returns (uint256 wstethAmount, uint256 wethAmount)
     {
         uint256 ratio = _calcTokensRatio(_tick);
         return _calcTokenAmountsFromRatio(ratio, _ethAmount);
@@ -346,34 +347,34 @@ contract UniV3LiquidityProvider {
     }
 
     function _getAmountOfEthForWsteth(uint256 _amountOfWsteth) internal view returns (uint256) {
-        return IWstETH(TOKEN0).getStETHByWstETH(_amountOfWsteth) + 1;
+        return IWstETH(WSTETH_TOKEN).getStETHByWstETH(_amountOfWsteth) + 1;
     }
 
-    function _wrapEthToTokens(uint256 _amount0, uint256 _amount1) internal {
-        uint256 ethForWsteth = _getAmountOfEthForWsteth(_amount0);
-        uint256 ethForWeth = _amount1;
+    function _wrapEthToTokens(uint256 _wstethAmount, uint256 _wethAmount) internal {
+        uint256 ethForWsteth = _getAmountOfEthForWsteth(_wstethAmount);
+        uint256 ethForWeth = _wethAmount;
         require(address(this).balance >= ethForWsteth + ethForWeth, "NOT_ENOUGH_ETH");
 
-        (bool success, ) = TOKEN0.call{value: ethForWsteth}("");
+        (bool success, ) = WSTETH_TOKEN.call{value: ethForWsteth}("");
         require(success, "WSTETH_MINTING_FAILED");
 
-        IWETH(TOKEN1).deposit{value: ethForWeth}();
+        IWETH(WETH_TOKEN).deposit{value: ethForWeth}();
 
-        require(IERC20(TOKEN0).balanceOf(address(this)) >= _amount0, "NOT_ENOUGH_WSTETH");
-        require(IERC20(TOKEN1).balanceOf(address(this)) >= _amount1, "NOT_ENOUGH_WETH");
+        require(IERC20(WSTETH_TOKEN).balanceOf(address(this)) >= _wstethAmount, "NOT_ENOUGH_WSTETH");
+        require(IERC20(WETH_TOKEN).balanceOf(address(this)) >= _wethAmount, "NOT_ENOUGH_WETH");
     }
 
     function _refundLeftoversToLidoAgent() internal {
-        uint256 token0Amount = IERC20(TOKEN0).balanceOf(address(this));
-        if (token0Amount > 0) {
-            IWstETH(TOKEN0).unwrap(token0Amount);
+        uint256 wstethAmount = IERC20(WSTETH_TOKEN).balanceOf(address(this));
+        if (wstethAmount > 0) {
+            IWstETH(WSTETH_TOKEN).unwrap(wstethAmount);
         }
 
         _refundERC20(STETH_TOKEN, IERC20(STETH_TOKEN).balanceOf(address(this)));
 
-        uint256 token1Amount = IERC20(TOKEN1).balanceOf(address(this));
-        if (token1Amount > 0) {
-            IWETH(TOKEN1).withdraw(token1Amount);
+        uint256 wethAmount = IERC20(WETH_TOKEN).balanceOf(address(this));
+        if (wethAmount > 0) {
+            IWETH(WETH_TOKEN).withdraw(wethAmount);
         }
 
         _refundETH();
