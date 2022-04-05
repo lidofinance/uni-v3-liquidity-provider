@@ -135,3 +135,22 @@ class leftovers_refund_checker():
                 self.wsteth_leftover * self.wsteth_token.stEthPerToken() / 1e18
             ) < 0.001  # 0.001%
 
+
+class Helpers:
+    @staticmethod
+    def filter_events_from(addr, events):
+        return list(filter(lambda evt: evt.address == addr, events))
+
+    @staticmethod
+    def assert_single_event_named(evt_name, tx, evt_keys_dict = None, source = None):
+        receiver_events = tx.events[evt_name]
+        if source is not None:
+            receiver_events = Helpers.filter_events_from(source, receiver_events)
+        assert len(receiver_events) == 1
+        if evt_keys_dict is not None:
+            assert dict(receiver_events[0]) == evt_keys_dict
+        return receiver_events[0]
+
+    @staticmethod
+    def assert_no_events_named(evt_name, tx):
+        assert evt_name not in tx.events

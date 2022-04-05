@@ -6,6 +6,7 @@ import os
 from scripts.utils import *
 import scripts.deploy
 import scripts.mint
+import scripts.acceptance_test
 
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
@@ -54,6 +55,21 @@ def test_deploy_script_and_mint_script(deployer, UniV3LiquidityProvider, pool, p
     assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before, lido_agent)
 
     os.remove(get_deploy_address_path())
+
+
+def test_deploy_and_acceptance_test_scripts(deployer, UniV3LiquidityProvider, pool, position_manager, lido_agent):
+    scripts.deploy.main(None, is_test_environment=True)
+    contract_address = read_deploy_address()
+    provider = UniV3LiquidityProvider.at(contract_address)
+    assert provider.admin() == DEV_MULTISIG
+
+    assert_contract_params_after_deployment(provider)
+
+    deployer.transfer(provider.address, ETH_TO_SEED)
+    deployer.transfer(DEV_MULTISIG, toE18(1))
+
+    # no explicit asserts because they are inside acceptance_test
+    scripts.acceptance_test.main()
 
 
 def test_mint_script_calldata(deployer, UniV3LiquidityProvider, pool, position_manager, lido_agent):
