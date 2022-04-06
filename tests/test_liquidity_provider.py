@@ -81,17 +81,18 @@ def test_mint_script_calldata(deployer, UniV3LiquidityProvider, pool, position_m
 
     assert_contract_params_after_deployment(provider)
 
-    deployer.transfer(provider.address, ETH_TO_SEED)
-
     calldata_path = scripts.mint.main(deployer_account=None, skip_confirmation=True, execute_tx=False)
-
     with open(calldata_path, 'r') as fp:
         calldata = fp.read()
 
+    deployer.transfer(provider.address, ETH_TO_SEED)
+    deployer.transfer(DEV_MULTISIG, toE18(1))
+
     args = provider.mint.decode_input(calldata)
     print('Mint args: ' + str(args))
-    tx = provider.mint.call(*args, {'from': DEV_MULTISIG})
 
+    dev_multisig = accounts.at(DEV_MULTISIG, force=True)
+    tx = dev_multisig.transfer(provider.address, data=calldata)
     token_id, liquidity, _, _ = tx.return_value
 
     assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before, lido_agent)
