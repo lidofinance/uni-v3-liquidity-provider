@@ -1,6 +1,4 @@
-from unittest import skip
 from brownie import *
-from pprint import pprint
 
 import sys
 import os.path
@@ -18,12 +16,16 @@ def main(execute_tx, deployer_account=None, priority_fee='2 wei', max_fee='300 g
     if not skip_confirmation:
         assert not get_is_live()
     
+    if type(execute_tx) != bool:
+        assert execute_tx in ['True', 'False'], "'execute_tx' can only by True or False"
+        execute_tx = True if execute_tx == 'True' else False
+    
     if execute_tx:
         if skip_confirmation:
             deployer_address = deployer_account
         else:
             assert deployer_account is not None
-            deployer_address, = accounts.load(deployer_account)
+            deployer_address = accounts.load(deployer_account)
     else:
         deployer_address = None
 
@@ -49,15 +51,19 @@ def main(execute_tx, deployer_account=None, priority_fee='2 wei', max_fee='300 g
             sys.exit(1)
 
     if execute_tx:
-        tx_params = { 'from': deployer_address, "priority_fee": priority_fee, "max_fee": max_fee }
+        tx_params = {
+            'from': deployer_address,
+            "priority_fee": priority_fee,
+            "max_fee": max_fee
+        }
 
         if not skip_confirmation:
-            reply = input('Are these transaction parameters correct? (yes/no)\n')
             print(
                 f'  priority_fee: {tx_params["priority_fee"]}\n'
                 f'  max_fee: {tx_params["max_fee"]}\n'
                 f'  from: {tx_params["from"]}\n'
             )
+            reply = input('Are these transaction parameters correct? (yes/no)\n')
             if reply != 'yes':
                 print("Operator hasn't approved correctness of the parameters. Deployment stopped.")
                 sys.exit(1)

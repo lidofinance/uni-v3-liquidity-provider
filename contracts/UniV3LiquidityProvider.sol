@@ -30,8 +30,7 @@ interface IWstETH {
 }
 
 // NB: Considerations about math precision
-// To reduce the impact of rounding errors we use "Ray Math" taken from AAVE protocol
-// A Ray is a unit with 27 decimals of precision.
+// To reduce the impact of rounding errors we use "E27 math"
 // Variables storing values with 27 digits of precision are named with suffix "E27"
 
 contract UniV3LiquidityProvider {
@@ -166,14 +165,14 @@ contract UniV3LiquidityProvider {
         (, int24 tick, , , , , ) = POOL.slot0();
         require(_minTick <= tick && tick <= _maxTick, "TICK_DEVIATION_TOO_BIG_AT_START");
 
-        (uint256 desWsteth, uint256 desWeth) = _calcTokenAmountsFromCurrentPoolSqrtPrice(ETH_TO_SEED);
+        (uint256 wstethDesired, uint256 wethDesired) = _calcTokenAmountsFromCurrentPoolSqrtPrice(ETH_TO_SEED);
 
-        _wrapEthToTokens(desWsteth, desWeth);
+        _wrapEthToTokens(wstethDesired, wethDesired);
 
         (uint256 minWsteth, uint256 minWeth) = _calcMinTokenAmounts(_minTick, _maxTick);
 
-        IERC20(WSTETH_TOKEN).approve(address(NONFUNGIBLE_POSITION_MANAGER), desWsteth);
-        IERC20(WETH_TOKEN).approve(address(NONFUNGIBLE_POSITION_MANAGER), desWeth);
+        IERC20(WSTETH_TOKEN).approve(address(NONFUNGIBLE_POSITION_MANAGER), wstethDesired);
+        IERC20(WETH_TOKEN).approve(address(NONFUNGIBLE_POSITION_MANAGER), wethDesired);
 
         INonfungiblePositionManager.MintParams memory params =
             INonfungiblePositionManager.MintParams({
@@ -182,8 +181,8 @@ contract UniV3LiquidityProvider {
                 fee: POOL.fee(),
                 tickLower: POSITION_LOWER_TICK,
                 tickUpper: POSITION_UPPER_TICK,
-                amount0Desired: desWsteth,
-                amount1Desired: desWeth,
+                amount0Desired: wstethDesired,
+                amount1Desired: wethDesired,
                 amount0Min: minWsteth,
                 amount1Min: minWeth,
                 recipient: LIDO_AGENT,
