@@ -12,6 +12,9 @@ Contract would wield ETHs, so in order to provide liquidity the portion of funds
 
 Both methods for seeding liquidity & returning the tokens are guarded: only DAO agent & contract admin are able to call them.
 
+# Dependencies
+The only dependency is eth-brownie >= 1.17.2 which is likely already installed globally, so there this no package manager files in the repo.
+
 # Contract interface
 In happy path scenario there is a single function which is supposed to be called after the deployment:
 
@@ -56,12 +59,19 @@ Script `scripts/scout.py` looks up current pool parameters.
 ## Deployment
 Script `scripts/deploy.py` deploys the contract and sets multisig address as contract address. All the parameters and multisig address is taken from `config.py`
 
-    brownie run scripts/deploy.py main <brownie account id> --network <target network>
+    brownie run scripts/deploy.py main <brownie account id> <priority_fee, eg "2 wei"> <max_fee, eg "300 gwei"> --network <target network>
 
 ## Acceptance test
-Is supposed to be run right after the deployment.
+Is supposed to be run twice:
+- after the deployment and seeding the contract with needed amount of ether;
 
-    TODO (run on fork)
+        brownie run scripts/acceptance_test.py main --network development
+
+- after providing the liquidity for the pool
+
+        brownie run scripts/acceptance_test.py main <token_id> <liquidity> --network development
+
+    where `<token_id>` and `<liquidity>` are to be taken from event `LiquidityProvided` created during liquidity provision
 
 ## Seed the liquidity
 Script `scripts/mint.py` calls contract's `mint()` with parameters specified in `config.py`.
