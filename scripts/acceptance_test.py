@@ -8,9 +8,7 @@ from config import *
 from .utils import *
 
 
-def main():
-    accounts[0].transfer(DEV_MULTISIG, toE18(1))
-
+def main(token_id=None, liquidity=None):
     provider_address = read_deploy_address()
 
     provider = UniV3LiquidityProvider.at(provider_address)
@@ -21,14 +19,28 @@ def main():
     wsteth_token = interface.WSTETH(WSTETH_TOKEN) 
     lido_agent = accounts.at(LIDO_AGENT, force=True)
 
-    tick_liquidity_before = pool.liquidity()
+    if token_id is None:
+        assert liquidity is None
 
-    leftovers_checker = leftovers_refund_checker(
-        provider, steth_token, wsteth_token, weth_token, lido_agent, Helpers)
+        admin = DEV_MULTISIG
 
-    tx = provider.mint(MIN_TICK, MAX_TICK, {'from': DEV_MULTISIG})
-    print_mint_return_value(tx.return_value)
-    token_id, liquidity, _, _ = tx.return_value
-    leftovers_checker.check(tx, need_check_agent_balance=False)
+        accounts[0].transfer(admin, toE18(1))
+
+        tick_liquidity_before = pool.liquidity()
+        leftovers_checker = leftovers_refund_checker(
+            provider, steth_token, wsteth_token, weth_token, lido_agent, Helpers)
+
+        tx = provider.mint(MIN_TICK, MAX_TICK, {'from': admin})
+        print_mint_return_value(tx.return_value)
+        token_id, liquidity, _, _ = tx.return_value
+        leftovers_checker.check(tx, need_check_agent_balance=False)
+    else:
+        assert liquidity is not None
+
+        tick_liquidity_before = None
+        liquidity = int(liquidity)
+        token_id = int(token_id)
 
     assert_liquidity_provided(provider, pool, position_manager, token_id, liquidity, tick_liquidity_before, lido_agent)
+
+    print("The test has passed, it's alright!")

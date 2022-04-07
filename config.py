@@ -6,15 +6,15 @@ from scripts.utils import *
 ETH_TO_SEED = toE18(600)
 POSITION_LOWER_TICK = -1630  # spot price 0.8496
 POSITION_UPPER_TICK = 970  # spot price 1.1019
-MIN_ALLOWED_TICK = 644 - 100
-MAX_ALLOWED_TICK = 644 + 100
+MIN_ALLOWED_TICK = 639 - 100
+MAX_ALLOWED_TICK = 639 + 100
 
 
 # #####################################
 # Parameters used for liquidity minting
 # #####################################
-MIN_TICK = 644 - 50
-MAX_TICK = 644 + 50
+MIN_TICK = 639 - 50
+MAX_TICK = 639 + 50
 
 
 # #####################################

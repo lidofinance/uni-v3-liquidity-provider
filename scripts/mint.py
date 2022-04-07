@@ -24,7 +24,7 @@ def main(execute_tx, deployer_account=None, priority_fee='2 wei', max_fee='300 g
         if skip_confirmation:
             deployer_address = deployer_account
         else:
-            assert deployer_account is not None
+            assert deployer_account is not None, 'Please specify brownie account to use'
             deployer_address = accounts.load(deployer_account)
     else:
         deployer_address = None
@@ -59,9 +59,9 @@ def main(execute_tx, deployer_account=None, priority_fee='2 wei', max_fee='300 g
 
         if not skip_confirmation:
             print(
+                f'  from: {tx_params["from"]}\n'
                 f'  priority_fee: {tx_params["priority_fee"]}\n'
                 f'  max_fee: {tx_params["max_fee"]}\n'
-                f'  from: {tx_params["from"]}\n'
             )
             reply = input('Are these transaction parameters correct? (yes/no)\n')
             if reply != 'yes':

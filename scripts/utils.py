@@ -88,12 +88,15 @@ def assert_liquidity_provided(provider, pool, position_manager, token_id, expect
     assert position_manager.ownerOf(token_id) == lido_agent.address
 
     position_liquidity, _, _, tokensOwed0, tokensOwed1 = pool.positions(provider.POSITION_ID())
-    current_tick_liquidity = pool.liquidity()
 
     assert tokensOwed0 == 0
     assert tokensOwed1 == 0
-    assert current_tick_liquidity == tick_liquidity_before + expected_liquidity
-    assert position_liquidity == expected_liquidity
+
+    assert position_liquidity == expected_liquidity, f'{position_liquidity} != {expected_liquidity}'
+
+    if tick_liquidity_before is not None:
+        current_tick_liquidity = pool.liquidity()
+        assert current_tick_liquidity == tick_liquidity_before + expected_liquidity
 
 
 class leftovers_refund_checker():

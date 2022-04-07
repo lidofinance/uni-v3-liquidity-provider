@@ -35,12 +35,16 @@ def main(deployer_account=None, priority_fee='2 wei', max_fee='300 gwei', is_tes
             print("Operator hasn't approved correctness of the parameters. Deployment stopped.")
             sys.exit(1)
 
-    tx_params = { 'from': deployer_address, "priority_fee": priority_fee, "max_fee": max_fee }
+    tx_params = {
+        'from': deployer_address,
+        "priority_fee": priority_fee,
+        "max_fee": max_fee
+    }
     if not is_test_environment:
         print(
+            f'  from: {tx_params["from"]}\n'
             f'  priority_fee: {tx_params["priority_fee"]}\n'
             f'  max_fee: {tx_params["max_fee"]}\n'
-            f'  from: {tx_params["from"]}\n'
         )
         reply = input('Are these transaction parameters correct? (yes/no)\n')
         if reply != 'yes':
