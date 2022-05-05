@@ -2,6 +2,7 @@ from scripts.utils import *
 
 # #######################################
 # Parameters used for contract deployment
+# For tick from price calculation see utils.py:get_tick_from_price(price)
 # #######################################
 ETH_TO_SEED = toE18(600)
 POSITION_LOWER_TICK = -1630  # spot price 0.8496

@@ -46,7 +46,6 @@ contract UniV3LiquidityProvider {
     address public constant WSTETH_TOKEN = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0; // wstETH
     address public constant WETH_TOKEN = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH
 
-    address public constant STETH_TOKEN = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
     address public constant LIDO_AGENT = 0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c;
 
     uint256 public constant ONE_E27 = 1e27;
@@ -81,7 +80,7 @@ contract UniV3LiquidityProvider {
 
     /// Emitted when ETH is refunded to Lido agent contract
     event EthRefunded(
-        address requestedBy,
+        address indexed requestedBy,
         uint256 amount
     );
 
@@ -165,6 +164,7 @@ contract UniV3LiquidityProvider {
         (, int24 tick, , , , , ) = POOL.slot0();
         require(_minTick <= tick && tick <= _maxTick, "TICK_DEVIATION_TOO_BIG_AT_START");
 
+        require(address(this).balance >= ETH_TO_SEED, "BALANCE_LESS_ETH_TO_SEED");
         (uint256 wstethDesired, uint256 wethDesired) = _calcTokenAmountsFromCurrentPoolSqrtPrice(ETH_TO_SEED);
 
         _wrapEthToTokens(wstethDesired, wethDesired);
@@ -263,20 +263,21 @@ contract UniV3LiquidityProvider {
         // But the amount must be large enough to provide sufficient precision
         int128 liquidity = 1e27;  
 
-        int256 wstethAmountE27 = SqrtPriceMath.getAmount0Delta(
+        // it's OK to convert to uint256: getAmountXDelta returns positive for positive liquidity
+        uint256 wstethAmountE27 = uint256(SqrtPriceMath.getAmount0Delta(
             _sqrtPriceX96,
             TickMath.getSqrtRatioAtTick(POSITION_UPPER_TICK),
             liquidity
-        );
-        int256 wethAmountE27 = SqrtPriceMath.getAmount1Delta(
+        ));
+        uint256 wethAmountE27 = uint256(SqrtPriceMath.getAmount1Delta(
             TickMath.getSqrtRatioAtTick(POSITION_LOWER_TICK),
             _sqrtPriceX96,
             liquidity
-        );
-        require(wstethAmountE27 > 0);
-        require(wethAmountE27 > 0);
+        ));
+        assert(wstethAmountE27 > 0);
+        assert(wethAmountE27 > 0);
 
-        wstEthOverWEthRatioE27 = uint256((wstethAmountE27 * 1e27) / wethAmountE27);
+        wstEthOverWEthRatioE27 = _divE27(wstethAmountE27, wethAmountE27);
     }
 
     function _mulE27(uint256 _a, uint256 _b) internal pure returns (uint256) {
@@ -346,6 +347,7 @@ contract UniV3LiquidityProvider {
     }
 
     function _getAmountOfEthForWsteth(uint256 _amountOfWsteth) internal view returns (uint256) {
+        // Add 1 wei because during eth to wsteth wrapping it gets lost
         return IWstETH(WSTETH_TOKEN).getStETHByWstETH(_amountOfWsteth) + 1;
     }
 
@@ -368,8 +370,6 @@ contract UniV3LiquidityProvider {
         if (wstethAmount > 0) {
             IWstETH(WSTETH_TOKEN).unwrap(wstethAmount);
         }
-
-        _refundERC20(STETH_TOKEN, IERC20(STETH_TOKEN).balanceOf(address(this)));
 
         uint256 wethAmount = IERC20(WETH_TOKEN).balanceOf(address(this));
         if (wethAmount > 0) {

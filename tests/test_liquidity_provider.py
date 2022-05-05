@@ -6,7 +6,7 @@ import os
 from scripts.utils import *
 import scripts.deploy
 import scripts.mint
-import scripts.acceptance_test
+import scripts.deploy_acceptance_test
 
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
@@ -17,7 +17,6 @@ def assert_contract_params_after_deployment(provider):
     assert POOL == provider.POOL()
     assert WSTETH_TOKEN == provider.WSTETH_TOKEN()
     assert WETH_TOKEN == provider.WETH_TOKEN()
-    assert STETH_TOKEN == provider.STETH_TOKEN()
     assert LIDO_AGENT == provider.LIDO_AGENT()
 
     assert POSITION_LOWER_TICK == provider.POSITION_LOWER_TICK()
@@ -69,7 +68,7 @@ def test_deploy_and_acceptance_test_scripts(deployer, UniV3LiquidityProvider, po
     deployer.transfer(DEV_MULTISIG, toE18(1))
 
     # no explicit asserts because they are inside acceptance_test
-    scripts.acceptance_test.main()
+    scripts.deploy_acceptance_test.main()
 
 
 def test_mint_script_calldata(deployer, UniV3LiquidityProvider, pool, position_manager, lido_agent):
@@ -190,10 +189,10 @@ def test_only_admin_or_dao_can_mint(deployer, provider):
     with reverts('AUTH_ADMIN_OR_LIDO_AGENT'):
         provider.mint(MIN_TICK, MAX_TICK, {'from': POOL})
 
-    with reverts('NOT_ENOUGH_ETH'):
+    with reverts('BALANCE_LESS_ETH_TO_SEED'):
         provider.mint(MIN_TICK, MAX_TICK, {'from': LIDO_AGENT})
 
-    with reverts('NOT_ENOUGH_ETH'):
+    with reverts('BALANCE_LESS_ETH_TO_SEED'):
         provider.mint(MIN_TICK, MAX_TICK, {'from': deployer})
 
 

@@ -249,6 +249,8 @@ contract TestUniV3LiquidityProvider is
 
     function _getSpotPrice() internal view returns (uint256) {
         (uint160 sqrtRatioX96, , , , , , ) = POOL.slot0();
+        // Get price from it's sqrt and decode X96 fixed point encoded number
+        // See https://docs.uniswap.org/sdk/guides/fetching-prices
         return uint(sqrtRatioX96).mul(uint(sqrtRatioX96)).mul(1e18) >> (96 * 2);
     }
 }
