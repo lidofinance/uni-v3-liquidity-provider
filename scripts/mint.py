@@ -8,7 +8,7 @@ from config import *
 from .utils import *
 
 
-def main(execute_tx, deployer_account=None, priority_fee='2 wei', max_fee='300 gwei', skip_confirmation=False):
+def main(execute_tx, deployer_account=None, priority_fee='2 gwei', max_fee='300 gwei', skip_confirmation=False):
     """`deployer_account` in live environment can either be:
         - brownie account name: use the account
         - None: save tx calldata for use in multisig
@@ -44,12 +44,6 @@ def main(execute_tx, deployer_account=None, priority_fee='2 wei', max_fee='300 g
         f'  position upper tick: {provider.POSITION_UPPER_TICK()} (price {get_price_from_tick(POSITION_UPPER_TICK):.4f})\n'
     )
 
-    if not skip_confirmation:
-        reply = input('Is this correct? (yes/no)\n')
-        if reply != 'yes':
-            print("Operator hasn't approved correctness of the parameters. Deployment stopped.")
-            sys.exit(1)
-
     if execute_tx:
         tx_params = {
             'from': deployer_address,
@@ -63,7 +57,8 @@ def main(execute_tx, deployer_account=None, priority_fee='2 wei', max_fee='300 g
                 f'  priority_fee: {tx_params["priority_fee"]}\n'
                 f'  max_fee: {tx_params["max_fee"]}\n'
             )
-            reply = input('Are these transaction parameters correct? (yes/no)\n')
+            reply = input(f'The transaction will be executed on chain ({network.show_active()}).\n'
+                          f'Are these parameters correct? (yes/no)\n')
             if reply != 'yes':
                 print("Operator hasn't approved correctness of the parameters. Deployment stopped.")
                 sys.exit(1)

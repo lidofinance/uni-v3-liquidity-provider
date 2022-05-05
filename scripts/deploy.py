@@ -9,7 +9,7 @@ from config import *
 from .utils import *
 
 
-def main(deployer_account=None, priority_fee='2 wei', max_fee='300 gwei', is_test_environment=False):
+def main(deployer_account=None, priority_fee='2 gwei', max_fee='300 gwei', is_test_environment=False):
     if get_is_live() is None:
         assert deployer_account is not None, 'Please set deployer deployer as the first arg of the script (see brownie run -h)'
 
@@ -27,6 +27,7 @@ def main(deployer_account=None, priority_fee='2 wei', max_fee='300 gwei', is_tes
         f'  POSITION_UPPER_TICK: {POSITION_UPPER_TICK} (price {get_price_from_tick(POSITION_LOWER_TICK):.4f})\n'
         f'  MIN_ALLOWED_TICK: {MIN_ALLOWED_TICK} (price {get_price_from_tick(MIN_ALLOWED_TICK):.4f})\n'
         f'  MAX_ALLOWED_TICK: {MAX_ALLOWED_TICK} (price {get_price_from_tick(MAX_ALLOWED_TICK):.4f})\n'
+        f'  DEV_MULTISIG: {DEV_MULTISIG} (will be set as admin after the contract deployment)\n'
     )
 
     if not is_test_environment:
