@@ -242,9 +242,10 @@ contract UniV3LiquidityProvider {
     }
 
     function _refundERC20(address _token, uint256 _amount) internal {
-        require(IERC20(_token).balanceOf(address(this)) >= _amount, "NOT_ENOUGH_TOKENS_TO_REFUND");
-        emit ERC20Refunded(msg.sender, _token, _amount);
-        TransferHelper.safeTransfer(_token, LIDO_AGENT, _amount);
+        if (_amount > 0) {
+            emit ERC20Refunded(msg.sender, _token, _amount);
+            TransferHelper.safeTransfer(_token, LIDO_AGENT, _amount);
+        }
     }
 
     /**
