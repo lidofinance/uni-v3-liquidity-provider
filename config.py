@@ -2,27 +2,33 @@ from scripts.utils import *
 
 # #######################################
 # Parameters used for contract deployment
+# For tick from price calculation see utils.py:get_tick_from_price(price)
 # #######################################
 ETH_TO_SEED = toE18(600)
-INITIAL_DESIRED_TICK = 627
-MAX_TICK_DEVIATION = 50
-
-# max abs value admin or dao can change initial desired tick
-MAX_ALLOWED_DESIRED_TICK_CHANGE = 45
+POSITION_LOWER_TICK = -1630  # spot price 0.8496
+POSITION_UPPER_TICK = 970  # spot price 1.1019
+MIN_ALLOWED_TICK = 639 - 100
+MAX_ALLOWED_TICK = 639 + 100
 
 
 # #####################################
 # Parameters used for liquidity minting
 # #####################################
-MINT_DESIRED_TICK = 632
+MIN_TICK = 639 - 50
+MAX_TICK = 639 + 50
 
 
 # #####################################
 # Parameters used for TESTING
+# Might needed to be adjusted to match current pool state
 # #####################################
+SMALL_POSITIVE_TICK_DEVIATION_WETH_SWAP_AMOUNT = toE18(230)
+SMALL_NEGATIVE_TICK_DEVIATION_WSTETH_SWAP_ETH_AMOUNT = toE18(340)
+LARGE_TICK_DEVIATION_WETH_SWAP_AMOUNT = toE18(400)
 
-# TODO: swap size for small tick deviation
-# TODO: swap size for large tick deviation
+
+# Addresses used in deploy scripts
+DEV_MULTISIG = "0x3cd9F71F80AB08ea5a7Dca348B5e94BC595f26A0"
 
 
 # Addesses used in testing

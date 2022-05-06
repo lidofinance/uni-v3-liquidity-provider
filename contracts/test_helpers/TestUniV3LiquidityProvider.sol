@@ -1,9 +1,9 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.7.0;
+pragma abicoder v2;
 
 import { IUniswapV3MintCallback } from "@uniswap/v3-core/contracts/interfaces/callback/IUniswapV3MintCallback.sol";
 import "../UniV3LiquidityProvider.sol";
-
 import "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
 
 
@@ -33,42 +33,56 @@ contract TestUniV3LiquidityProvider is
 
     address public constant CHAINLINK_STETH_ETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
 
+    uint256 public constant TOTAL_POINTS = 10000;  // Amount of points in 100%
+
     constructor(
         uint256 _ethAmount,
-        int24 _desiredTick,
-        uint24 _maxTickDeviation,
-        uint24 _maxAllowedDesiredTickChange
+        int24 _positionLowerTick,
+        int24 _positionUpperTick,
+        int24 _minAllowedTick,
+        int24 _maxAllowedTick
     ) UniV3LiquidityProvider(
         _ethAmount,
-        _desiredTick,
-        _maxTickDeviation,
-        _maxAllowedDesiredTickChange
+        _positionLowerTick,
+        _positionUpperTick,
+        _minAllowedTick,
+        _maxAllowedTick
     ) {
     }
 
     /// returns wstEthOverWEthRatio
-    function calcDesiredTokensRatio(int24 _tick) external view returns (uint256) {
-        return _calcDesiredTokensRatio(_tick);
+    function calcTokensRatio(int24 _tick) external view returns (uint256) {
+        return _calcTokensRatio(_tick);
     }
 
-    function calcDesiredTokenAmounts(int24 _tick, uint256 _ethAmount) external view
-        returns (uint256 amount0, uint256 amount1)
+    function calcTokensRatioFromSqrtPrice(uint160 _sqrtPriceX86) external view returns (uint256 wstEthOverWEthRatio) {
+        return _calcTokensRatioFromSqrtPrice(_sqrtPriceX86);
+    }
+
+    function calcTokenAmounts(int24 _tick, uint256 _ethAmount) external view
+        returns (uint256 wstethAmount, uint256 wethAmount)
     {
-        (amount0, amount1) = _calcDesiredTokenAmounts(_tick, _ethAmount);
+        (wstethAmount, wethAmount) = _calcTokenAmounts(_tick, _ethAmount);
     }
 
-    function calcDesiredAndMinTokenAmounts() external {
-        _calcDesiredAndMinTokenAmounts();
+    function calcTokenAmountsFromCurrentPoolSqrtPrice(uint256 _ethAmount) external view
+        returns (uint256 wstethAmount, uint256 wethAmount)
+    {
+        return _calcTokenAmountsFromCurrentPoolSqrtPrice(_ethAmount);
+    }
+
+    function calcMinTokenAmounts(int24 _minTick, int24 _maxTick) external view
+        returns (
+            uint256 minWsteth,
+            uint256 minWeth
+    ) {
+        return _calcMinTokenAmounts(_minTick, _maxTick);
     }
 
     function priceDeviationPoints(uint256 _priceOne, uint256 _priceTwo)
         public view returns (uint256 difference)
     {
         return _priceDeviationPoints(_priceOne, _priceTwo);
-    }
-
-    function deviationFromDesiredTick() external view returns (uint24) {
-        return _deviationFromDesiredTick();
     }
 
     function getAmountOfEthForWsteth(uint256 _amountOfWsteth) external view returns (uint256) {
@@ -106,8 +120,8 @@ contract TestUniV3LiquidityProvider is
         _refundLeftoversToLidoAgent();
     }
 
-    function wrapEthToTokens(uint256 _amount0, uint256 _amount1) external {
-        _wrapEthToTokens(_amount0, _amount1);
+    function wrapEthToTokens(uint256 _wstethAmount, uint256 _wethAmount) external {
+        _wrapEthToTokens(_wstethAmount, _wethAmount);
     }
 
     function getPositionInfo(uint256 _tokenId) external view returns (
@@ -117,20 +131,34 @@ contract TestUniV3LiquidityProvider is
         int24 tickLower,
         int24 tickUpper
     ){
-        (
-            ,
-            address operator,
-            ,
-            ,
-            ,
-            int24 tickLower,
-            int24 tickUpper,
-            uint128 liquidity,
-            ,
-            ,
-            uint128 tokensOwed0,
-            uint128 tokensOwed1
-        ) = NONFUNGIBLE_POSITION_MANAGER.positions(_tokenId);
+        ( , , , , , tickLower, tickUpper, liquidity, , , tokensOwed0, tokensOwed1)
+            = NONFUNGIBLE_POSITION_MANAGER.positions(_tokenId);
+    }
+
+    // A wrapper around library function
+    function getSqrtRatioAtTick(int24 _tick) external view returns (uint160) {
+        return TickMath.getSqrtRatioAtTick(_tick);
+    }
+
+    // A wrapper around library function
+    function getTickAtSqrtRatio(uint160 _sqrtRatioX96) external view returns (int24) {
+        return TickMath.getTickAtSqrtRatio(_sqrtRatioX96);
+    }
+
+    // A wrapper around library function for current pool state
+    function getLiquidityForAmounts(uint256 wstethAmount, uint256 wethAmount) external view returns (uint128 liquidity)
+    {
+        (uint160 sqrtPriceX96, , , , , , ) = POOL.slot0();
+        uint160 sqrtRatioAX96 = TickMath.getSqrtRatioAtTick(POSITION_LOWER_TICK);
+        uint160 sqrtRatioBX96 = TickMath.getSqrtRatioAtTick(POSITION_UPPER_TICK);
+
+        liquidity = LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            sqrtRatioAX96,
+            sqrtRatioBX96,
+            wstethAmount,
+            wethAmount
+        ); 
     }
 
     // Calc amounts by using POOL's mint (not NonFungibleTokenManager and not manual calculations)
@@ -147,27 +175,6 @@ contract TestUniV3LiquidityProvider is
         );
     }
 
-    // A wrapper around library function
-    function getSqrtRatioAtTick(int24 _tick) external view returns (uint160) {
-        return TickMath.getSqrtRatioAtTick(_tick);
-    }
-
-    // A wrapper around library function for current pool state
-    function getLiquidityForAmounts(uint256 amount0, uint256 amount1) external view returns (uint128 liquidity)
-    {
-        (uint160 sqrtPriceX96, , , , , , ) = POOL.slot0();
-        uint160 sqrtRatioAX96 = TickMath.getSqrtRatioAtTick(POSITION_LOWER_TICK);
-        uint160 sqrtRatioBX96 = TickMath.getSqrtRatioAtTick(POSITION_UPPER_TICK);
-
-        liquidity = LiquidityAmounts.getLiquidityForAmounts(
-            sqrtPriceX96,
-            sqrtRatioAX96,
-            sqrtRatioBX96,
-            amount0,
-            amount1
-        ); 
-    }
-
     function uniswapV3MintCallback(
         uint256 _amount0Owed,
         uint256 _amount1Owed,
@@ -178,13 +185,15 @@ contract TestUniV3LiquidityProvider is
         require(_amount0Owed > 0, "AMOUNT0OWED_IS_ZERO");
         require(_amount1Owed > 0, "AMOUNT1OWED_IS_ZERO");
 
+        uint256 balanceBefore = address(this).balance;
         _wrapEthToTokens(_amount0Owed, _amount1Owed);
 
-        TransferHelper.safeTransfer(TOKEN0, address(POOL), _amount0Owed);
-        TransferHelper.safeTransfer(TOKEN1, address(POOL), _amount1Owed);
+        require(address(this).balance - (balanceBefore - ETH_TO_SEED) < 10, "DEBUG_MOCK_TOO_MUCH_SPARE_ETH_LEFT");
+
+        TransferHelper.safeTransfer(WSTETH_TOKEN, address(POOL), _amount0Owed);
+        TransferHelper.safeTransfer(WETH_TOKEN, address(POOL), _amount1Owed);
     }
     
-
     /**
      * @dev We expect it not to be executed as Uniswap-v3 doesn't use safeTransferFrom
      * Will revert if called to alert.
@@ -205,7 +214,8 @@ contract TestUniV3LiquidityProvider is
     }
 
     function _getChainlinkFeedLatestRoundDataPrice() internal view virtual returns (int256) {
-        ( , int256 price, , uint256 timeStamp, ) = ChainlinkAggregatorV3Interface(CHAINLINK_STETH_ETH_PRICE_FEED).latestRoundData();
+        ( , int256 price, , uint256 timeStamp, ) = 
+            ChainlinkAggregatorV3Interface(CHAINLINK_STETH_ETH_PRICE_FEED).latestRoundData();
         assert(timeStamp != 0);
         return price;
     }
@@ -217,7 +227,7 @@ contract TestUniV3LiquidityProvider is
         int price = _getChainlinkFeedLatestRoundDataPrice();
 
         uint256 ethPerSteth = uint256(price) * 10**(18 - priceDecimals);
-        uint256 stethPerWsteth = IWstETH(TOKEN0).stEthPerToken();
+        uint256 stethPerWsteth = IWstETH(WSTETH_TOKEN).stEthPerToken();
         return (ethPerSteth * stethPerWsteth) / 1e18;
     }
 
@@ -239,6 +249,8 @@ contract TestUniV3LiquidityProvider is
 
     function _getSpotPrice() internal view returns (uint256) {
         (uint160 sqrtRatioX96, , , , , , ) = POOL.slot0();
+        // Get price from it's sqrt and decode X96 fixed point encoded number
+        // See https://docs.uniswap.org/sdk/guides/fetching-prices
         return uint(sqrtRatioX96).mul(uint(sqrtRatioX96)).mul(1e18) >> (96 * 2);
     }
 }
