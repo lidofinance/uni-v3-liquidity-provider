@@ -17,6 +17,7 @@ def assert_contract_params_after_deployment(provider):
     assert POOL == provider.POOL()
     assert WSTETH_TOKEN == provider.WSTETH_TOKEN()
     assert WETH_TOKEN == provider.WETH_TOKEN()
+    assert STETH_TOKEN == provider.STETH_TOKEN()
     assert LIDO_AGENT == provider.LIDO_AGENT()
 
     assert POSITION_LOWER_TICK == provider.POSITION_LOWER_TICK()

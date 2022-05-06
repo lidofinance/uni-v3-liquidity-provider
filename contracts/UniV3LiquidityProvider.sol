@@ -46,6 +46,7 @@ contract UniV3LiquidityProvider {
     address public constant WSTETH_TOKEN = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0; // wstETH
     address public constant WETH_TOKEN = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH
 
+    address public constant STETH_TOKEN = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
     address public constant LIDO_AGENT = 0x3e40D73EB977Dc6a537aF587D48316feE66E9C8c;
 
     uint256 public constant ONE_E27 = 1e27;
@@ -241,6 +242,7 @@ contract UniV3LiquidityProvider {
     }
 
     function _refundERC20(address _token, uint256 _amount) internal {
+        require(IERC20(_token).balanceOf(address(this)) >= _amount, "NOT_ENOUGH_TOKENS_TO_REFUND");
         emit ERC20Refunded(msg.sender, _token, _amount);
         TransferHelper.safeTransfer(_token, LIDO_AGENT, _amount);
     }
@@ -370,6 +372,8 @@ contract UniV3LiquidityProvider {
         if (wstethAmount > 0) {
             IWstETH(WSTETH_TOKEN).unwrap(wstethAmount);
         }
+
+        _refundERC20(STETH_TOKEN, IERC20(STETH_TOKEN).balanceOf(address(this)));
 
         uint256 wethAmount = IERC20(WETH_TOKEN).balanceOf(address(this));
         if (wethAmount > 0) {
